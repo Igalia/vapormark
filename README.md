@@ -1,4 +1,4 @@
-`vapormark` is a benchmark framework developed for measuring various performance metrics (e.g., throughput, latency, and tail latency) and the process states (e.g., backend stall, energy consumption) while running a program on Linux. It especially targets for `SteamOS` -- a Linux based gaming device -- but the most features are genetically useful regular Linux environments.
+`vapormark` is a benchmark framework developed for measuring various performance metrics (e.g., throughput, latency, and tail latency) and the process states (e.g., backend stall, energy consumption) while running a program on Linux. It especially targets `SteamOS` -- a Linux-based gaming device --but most features are genetically useful in regular Linux environments.
 
 
 Three Phases
@@ -12,10 +12,10 @@ Only the first step should run on a target device, such as `SteamDeck`. The othe
 
 External Dependencies
 ---------------------
-`vapormark` uses the followings in each phase:
+`vapormark` uses the following in each phase:
   - running a benchmark (i.e., collecting performance data)
       - [schbench](https://kernel.googlesource.com/pub/scm/linux/kernel/git/mason/schbench/) for micro-benchmarking of scheduler performance
-      - [MangoHud](https://github.com/flightlessmango/MangoHud) for measuring FPS (frame per second) while a running game
+      - [MangoHud](https://github.com/flightlessmango/MangoHud) for measuring FPS (frame per second) during a running game
       - `strace`, `trace-cmd`, `cpupower`, and `perf` for collecting processor states
   - analyzing the collected data
       - `matplotlib` python library for generating graphs
@@ -31,14 +31,14 @@ Just clone this repository and hit `make` on the top of the directory. The build
 If you want to measure FPS, install `MangoHud`. For `SteamDeck`, please refer the following steps:
   1. Press `STEAM` button then choose `Power -> Switch to Desktop`
   2. On Plasma Desktop, launch `Discover Center`. Then find and install `MangoHud`
-  3. Copy the ManguHud configuration file, `vapormark/config/MangoHud.conf` to `/home/deck/mangologs-vapormark`. This is the minimal MangoHud configuration which `vapormark` expects.
+  3. Copy the ManguHud configuration file, `vapormark/config/MangoHud.conf` to `/home/deck/mangologs-vapormark`. This is the minimal MangoHud configuration that `vapormark` expects.
 
 Running a benchmark and collecting performance data
 ---------------------------------------------------
 
 #### `scmon`: collecting system usage of a process tree
 
-`scmon` collects a system call usage of a process tree. It generates per-task system call trace file under `OUTDIR` with prefix `LOG` and suffix `-scmon.*`. It imposes noticeable performance overhead so it should not be used when collecting performance number. `scmon` is useful to understand the high-level behavioral traits of an application.
+`scmon` collects a system call usage of a process tree. It generates per-task system call trace file under `OUTDIR` with prefix `LOG` and suffix `-scmon.*`. It imposes noticeable performance overhead so it should not be used when collecting performance numbers. `scmon` is useful to understand the high-level behavioral traits of an application.
 
 ```
 usage: scmon [-h] -o OUTDIR -l LOG [-p PID] [-r ROOT] [-n NAME] [-c CMD [CMD ...]]
@@ -62,7 +62,7 @@ and all its decendents under log/steam*-scmon*.
 
 #### `procmon`: collecting processor and scheduling statistics
 
-`procmon` collects fours types of information: 1) scheduler's wakeup events, 2) CPU's c-state, 3) CPU's energy consumption, and 4) processor's performance monitoring data (e.g., instruction per cycle). Similar to `scmon`, it generates logs under `OUTDIR` with prefix `LOG` and suffix `-procmon.*`. It collects information while it runs. The runtime overhead is not marginal so it can be run with an application level benchmark (like game). However, it is not recommended with a micro-benchmark (`schdbench`), which is much more sensitive against any noises.
+`procmon` collects four types of information: 1) scheduler's wakeup events, 2) CPU's c-state, 3) CPU's energy consumption, and 4) processor's performance monitoring data (e.g., instruction per cycle). Similar to `scmon`, it generates logs under `OUTDIR` with prefix `LOG` and suffix `-procmon.*`. It collects information while it runs. The runtime overhead is not marginal so it can be run with an application level benchmark (like game). However, it is not recommended with a micro-benchmark (`schdbench`), which is much more sensitive to any noises.
 
 ```
 usage: procmon [-h] -o OUTDIR -l LOG [-s] [-c] [-e] [-p] [-a]
@@ -85,7 +85,7 @@ procmon internally uses 'trace-cmd', 'cpupower', and 'perf'. It stores statistic
 ```
 
 #### `mbench`: running a micro-benchmark
-`mbench` is a wrapper, which runs `schbench` with a pre-configured settings. For convenience, it launches `procmon` if necessary. However, to get the accurate performance results, it is recommended `mbench` with and witthout `procmon`.
+`mbench` is a wrapper which runs `schbench` with a pre-configured settings. For convenience, it launches `procmon` if necessary. However, to get accurate performance results, it is recommended `mbench` with and without `procmon`.
 
 ```
 usage: mbench [-h] -o OUTDIR -l LOG [-b BG] [-f FG] [-c CONFIG] [-r RUNTIME] [-p]
@@ -113,11 +113,11 @@ for performance comparison and another with profiling for analysis.
 ```
 
 #### `MangoHud`: measuring FPS, CPU/GPU utilization, etc.
-Launching, starting, and stopping `MangoHud` is not integrated with `vapormark`. Hence `vapormark` just follows the standard `MangoHud` usage. Especially, in `SteamDeck`, please refer the following procedure:
+Launching, starting, and stopping `MangoHud` is not integrated with `vapormark`. Hence `vapormark` just follows the standard `MangoHud` usage. Especially in `SteamDeck`, please refer to the following procedure:
 
 - For a game to FPS logging, go to `Properties -> General -> Launch Options` and add `mangohud %command%`. *The game must be launched in **Desktop Mode (not in Gaming Mode)** to log FPS and other system stats.*
 
-- Now you will see the overlay window showing FPS when launching the game. You can start and stop FPS logging by hitting `Shift_L+F2`. The log will be stored at `/home/deck/mangologs-vapormark`. Some games hang when MangoHud is enabled. Other useful MangoHud shortcuts are as follows:
+- Now, you will see the overlay window showing FPS when launching the game. You can start and stop FPS logging by hitting `Shift_L+F2`. The log will be stored at `/home/deck/mangologs-vapormark`. Some games hang when MangoHud is enabled. Other useful MangoHud shortcuts are as follows:
 
     ```
     Shift_L+F2 : Toggle Logging
@@ -125,7 +125,7 @@ Launching, starting, and stopping `MangoHud` is not integrated with `vapormark`.
     Shift_R+F12 : Toggle Hud        
      ```
 
-- Once you finish FPS logging by hitting `Shift_L+F2`, `MangoHud` will generates a a `csv` log file under  `/home/deck/mangologs-vapormark`. Please copy and rename it ending with `-mangohud.csv` for analysis and report generation.
+- Once you finish FPS logging by hitting `Shift_L+F2`, `MangoHud` will generate a `csv` log file under  `/home/deck/mangologs-vapormark`. Please copy and rename it ending with `-mangohud.csv` for analysis and report generation.
 
 
 - Following games provide in-game benchmarks:
@@ -141,7 +141,7 @@ Launching, starting, and stopping `MangoHud` is not integrated with `vapormark`.
 
 Analyzing the collected data
 ----------------------------
-Once the performance data is collected, it is time to analyze results. In this phase, `vapormark` transforms various logs files into the standard CSV format and produces the latency distribution graphs. Specifically, it provides the following commands. The generated files have a suffix of its program, `*-scinsight.*`, `*-procinsight.*`, and `*-ginsight.*`
+Once the performance data is collected, it is time to analyze the results. In this phase, `vapormark` transforms various log files into the standard CSV format and produces the latency distribution graphs. Specifically, it provides the following commands. The generated files have a suffix of its program, `*-scinsight.*`, `*-procinsight.*`, and `*-ginsight.*`
 
 #### `scinsight`: analyzing `scmon` logs
 ```
@@ -194,7 +194,7 @@ options:
 Generating a (comparison) report
 --------------------------------
 
-`vapormark` provides a reporting feature which compares the results of multiple configurations. This is especially useful when checking the impact of a certain optimization. When more than one log directories are given (with multiple -l options), `report` uses the logs in the first directory as a baseline and shows the relative delta in percent. 
+`vapormark` provides a reporting feature that compares the results of multiple configurations. This is especially useful when checking the impact of a certain optimization. When more than one log directories are given (with multiple -l options), `report` uses the logs in the first directory as a baseline and shows the relative delta in percent. 
 
 ```
 usage: report [-h] -l LOGDIR -p PREFIX -o OUTPUT [-f] [-g]
@@ -216,7 +216,7 @@ options:
 For example, `report -l base_dir -l cmp_dir -p game1 -o report.md` compares `game1` logs 
 in two directoreis -- `base_dir` and `cmp_dir` -- and generates `report.md`. `base_dir` 
 is used in calculating the relative difference. When only one log directory is given, 
-only the summary of results without comparision is provided. It expects certain file 
+only the summary of results without comparison is provided. It expects certain file 
 extensions: `*.factorio_out` for factorio benchmark and `*.schbench_out` for schbench 
 benchmark.
 ```
@@ -237,4 +237,3 @@ options:
   -s SET, --set SET  Set the scheculer parameters
 sched-config: error: either '-g' or '-s' should be specified
 ```
-
