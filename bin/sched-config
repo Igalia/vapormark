@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+import sys
+import csv
+import argparse
+
+def sched_config_set(config_csv):
+    with open(config_csv, "r") as cf:
+        rd = csv.reader(cf)
+        rd.__next__()
+        for (k, v) in rd:
+            k = k.strip()
+            v = v.strip()
+            with open(k, "w") as kf:
+               print(v, file = kf) 
+
+def sched_config_get(config_csv):
+    params = ["/proc/sys/kernel/sched_cfs_bandwidth_slice_us",
+              "/sys/kernel/debug/sched/latency_ns",
+              "/sys/kernel/debug/sched/min_granularity_ns", 
+              "/sys/kernel/debug/sched/wakeup_granularity_ns", 
+              "/sys/kernel/debug/sched/migration_cost_ns", 
+              "/sys/kernel/debug/sched/nr_migrate"]
+
+    with open(config_csv, "w") as cf:
+        print("%s, %s" % ("{0:^50}".format("attribute"),
+                          "{0:^20}".format("value")), file = cf)
+        for p in params:
+            with open(p, "r") as f:
+                l = f.readline()
+                v = l.strip()
+                print("%s, %s" % ("{0:<50}".format(p),
+                                  "{0:>20}".format(v)), file = cf)
+
+def sched_config(args):
+    if args.get != None:
+        sched_config_get(args.get)
+    elif args.set != None:
+        sched_config_set(args.set)
+
+def get_cmd_options(argv):
+    parser = argparse.ArgumentParser(
+            prog = "sched-config",
+            description = "Set or get the scheduler config parameters")
+    parser.add_argument('-g', '--get', action='store',
+                        help='Get the scheculer parameters') 
+    parser.add_argument('-s', '--set', action='store',
+                        help='Set the scheculer parameters') 
+    args = parser.parse_args(argv)
+
+    # sanity check of arguments
+    nopts = (0 if args.get == None else 1)  + \
+            (0 if args.set == None else 1)
+    if nopts != 1:
+        parser.print_help()
+        print("sched-config: error: either '-g' or '-s' should be specified", 
+              file = sys.stderr)
+        exit(1)
+    return args
+
+
+if __name__ == "__main__":
+    args = get_cmd_options(sys.argv[1:])
+    sched_config(args)
+
+"""
+attribute                                        , value
+/proc/sys/kernel/sched_cfs_bandwidth_slice_us    ,    3000
+/sys/kernel/debug/sched/latency_ns               , 3000000
+/sys/kernel/debug/sched/min_granularity_ns       ,  300000
+/sys/kernel/debug/sched/wakeup_granularity_ns    ,  500000
+/sys/kernel/debug/sched/migration_cost_ns        ,   50000
+/sys/kernel/debug/sched/nr_migrate               ,     128
+"""

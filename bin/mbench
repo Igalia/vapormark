@@ -1,0 +1,162 @@
+#!/usr/bin/env python3
+import os
+import sys
+import subprocess
+import signal
+import glob
+import argparse
+import psutil
+
+cur_dir = os.path.dirname(__file__)
+running_time = 90
+running_tasks = []
+
+class color:
+    HEADER    = '\033[95m'
+    BLUE      = '\033[94m'
+    GREEN     = '\033[92m'
+    WARNING   = '\033[93m'
+    FAIL      = '\033[91m'
+    ENDC      = '\033[0m'
+    BOLD      = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+def print_log(msg):
+    print(color.BLUE + "# [mbench] " + msg + color.ENDC)
+
+def ignore_term_signals(): 
+    term_signals = (signal.SIGTERM, signal.SIGINT, signal.SIGABRT, 
+                    signal.SIGBUS, signal.SIGILL, signal.SIGSEGV, 
+                    signal.SIGHUP)
+    for s in term_signals: 
+        # do nothing upon kill signals for graceful exit
+        signal.signal(s, lambda signum, frame: None)
+
+def kill_all(parent):
+    # NOTE
+    # - SIGINT should be sent since some programs (e.g., trace-cmd) terminate
+    # gracefully only for SIGINT (Ctrl-C)
+   
+    # kill all the process tree of parent
+    children = psutil.Process(parent.pid).children(True)
+    for c in children:
+        try:
+            c.send_signal(signal.SIGINT)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            pass
+    try:
+        parent.send_signal(signal.SIGINT)
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        pass
+    # block until all terminated
+    try:
+        psutil.wait_procs(children)
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        pass
+
+def run_bench(args):
+    # prep for gracefil termination
+    ignore_term_signals()
+
+    # prep for logging
+    subprocess.Popen("mkdir -p " + args.outdir,
+                     shell=True, stdout=None, stderr=None).wait()
+    # prep command lines
+    sh_cmds = []
+    # 1) background task
+    if args.bg != None:
+        sh_cmds.append(args.bg)
+    # 2) performance monitor
+    if args.procmon:
+        global cur_dir
+        cmd = os.path.join(cur_dir, "procmon")
+        arg = " -o %s -l %s -a" % (args.outdir, args.log)
+        sh_cmds.append(cmd + arg)
+    # 3) benchmark itself
+    log_fil = os.path.join(args.outdir, args.log + ".schbench_out")
+    log_out = " 2>&1 | tee " + log_fil
+    sh_cmds.append(args.fg + log_out)
+
+    # run commands
+    for sh_cmd in sh_cmds:
+        print_log(sh_cmd)
+        p = subprocess.Popen(sh_cmd, shell=True)
+        # prepend a task to the list
+        running_tasks.insert(0, p)
+
+def wait_for_tasks(args):
+    # wait for the running benchmarks
+    p = running_tasks[0]
+    p.wait()
+
+    # kill all others
+    for p in running_tasks[1:]:
+        kill_all(p)
+
+def expand_args_config(args):
+    # sanity check
+    if args.fg != None or args.bg != None:
+        parser.print_help()
+        print("bench: error: `-c` and `-f/-b` are disjoint." \
+              "Only one should be specified.", file = sys.stderr)
+        exit(1)
+
+    global cur_dir
+    if args.config == "schbench50":
+        args.bg = None
+        args.fg = os.path.join(cur_dir, "schbench") + " -F128 -n10 -r%d -A50" % (args.runtime)
+    elif args.config == "schbench100":
+        args.bg = None
+        args.fg = os.path.join(cur_dir, "schbench") + " -F128 -n10 -r%d" % (args.runtime)
+    elif args.config == "schbench200":
+        args.bg = os.path.join(cur_dir, "schbench") + " -F256 -n10 -r%d 2>&1 > /dev/null" % (args.runtime * 2)
+        args.fg = os.path.join(cur_dir, "schbench") + " -F128 -n10 -r%d" % (args.runtime)
+    else:
+        parser.print_help()
+        print("bench: error: unknown configuration: %s" % args.config, 
+              file = sys.stderr)
+        exit(1)
+
+def get_cmd_options(argv):
+    parser = argparse.ArgumentParser(
+            prog = "mbench",
+            description = "Run a micro-benchmark with a pre-configured setting",
+            epilog = color.WARNING + "Performance monitoring (-p) WILL " \
+                    "interfere the results of micro-benchmark. Do NOT use " \
+                    "-p when you collect performance results. Instead, run the " \
+                    "same benchmark twice: one without profiling for performance " \
+                    "comparison and another with profiling for analysis." + color.ENDC)
+    parser.add_argument('-o', '--outdir', action='store', required=True,
+                        help='output directory') 
+    parser.add_argument('-l', '--log', action='store', required=True,
+                        help='log file prefix') 
+    parser.add_argument('-b', '--bg', action='store',
+                        help='command line of a background task') 
+    parser.add_argument('-f', '--fg', action='store',
+                        help='command line of a foreground task for benchmarking') 
+    parser.add_argument('-c', '--config', action='store',
+                        help='run a benchmark with preconfigured setting: `schbench50`, `schbench100`, and `schbench200`, each of which runs `schbench` with 50%%, 100%%, and 200%% CPU utilization, respectively')
+    parser.add_argument('-r', '--runtime', action='store', type=int, default=90,
+                        help='benchmark running time in seconds (default = 90sec)') 
+    parser.add_argument('-p', '--procmon', action='store_true',
+                        help='run with profiling on') 
+    args = parser.parse_args(argv)
+
+    # expand args.config
+    if args.config != None:
+        expand_args_config(args)
+
+    # sanity check
+    if args.fg == None:
+        parser.print_help()
+        print("bench: error: either `-f` or `-c` should be specified.",
+              file = sys.stderr)
+        exit(1)
+
+    return args
+
+if __name__ == "__main__":
+    args = get_cmd_options(sys.argv[1:])
+    run_bench(args)
+    wait_for_tasks(args)
+

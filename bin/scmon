@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+import os
+import sys
+import subprocess
+import signal
+import glob
+import argparse
+import psutil
+
+def pidof(pname):
+    pids = []
+    for p in psutil.process_iter():
+       try:
+           pinfo = p.as_dict(attrs=['pid', 'name'])
+           if (pinfo['name'] == pname):
+               pids.append( pinfo['pid'] )
+       except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+           pass
+    return pids
+
+def pstree(pid):
+    try:
+        children = psutil.Process(pid).children(True)
+        pids = map(lambda c: c.as_dict()['pid'], children)
+        return list(pids)
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        return []
+
+def strace_pids(pids, odir, log):
+    sh_cmd = "strace -o {log_path} -ff -p {pids}".format(
+            log_path=os.path.join(odir, log), 
+            pids=",".join(str(pid) for pid in pids))
+    p = subprocess.Popen(sh_cmd, shell=True, stdout=None, stderr=None)
+    p.wait()
+    return p
+
+def strace_cmd(cmd, odir, log):
+    sh_cmd = ["strace", "-o", os.path.join(odir, log), "-ff"] + cmd
+    p = subprocess.Popen(sh_cmd)
+    p.wait()
+    return p
+
+def ignore_term_signals(): 
+    term_signals = (signal.SIGTERM, signal.SIGINT, signal.SIGABRT, 
+                    signal.SIGBUS, signal.SIGILL, signal.SIGSEGV, 
+                    signal.SIGHUP)
+    for s in term_signals: 
+        # do nothing upon kill signals for graceful exit
+        signal.signal(s, lambda signum, frame: None)
+
+def run_syscall_trace(args):
+    # prep for gracefil termination
+    ignore_term_signals()
+
+    # prep for logging
+    log = args.log + "-scmon"
+    subprocess.Popen("mkdir -p " + args.outdir,
+                     shell=True, stdout=None, stderr=None).wait()
+    outdir = args.outdir
+
+    # strace with a command
+    if args.cmd:
+        strace_cmd(args.cmd, outdir, log)
+        return
+
+    # strace with process id(s)
+    #   -p: strace of pid
+    if args.pid:
+        pids = [args.pid]
+    #   -r: strace of pid and all its decendents
+    elif args.root:
+        pids = pstree(args.root)
+    #   -n: strace of a process with 'name' and all its decendents
+    elif args.name:
+        ps = pidof(args.name)
+        if ps == []:
+            print("scmon: error: %s does not exists" % args.name,
+                  file = sys.stderr)
+            exit(1)
+        pids = []
+        for p in ps:
+            pids = pids + pstree(p)
+    strace_pids(pids, outdir, log)
+
+def get_cmd_options(argv):
+    parser = argparse.ArgumentParser(
+            prog = "scmon",
+            description = "Collect system call usage statistics of a program",
+            epilog = "For example, 'scmon -o log -l steam -n steam' to log " \
+                     "the system call usage of 'steam' and all its decendents " \
+                     "under log/steam*-scmon*.")
+    parser.add_argument('-o', '--outdir', action='store', required=True,
+                        help='output directory') 
+    parser.add_argument('-l', '--log', action='store', required=True,
+                        help='log file prefix' ) 
+    parser.add_argument('-p', '--pid', action='store', type=int,
+                        help='process id to monitor') 
+    parser.add_argument('-r', '--root', action='store', type=int,
+                        help='root process id to monitor ' \
+                                '(all decendents will be monitored)') 
+    parser.add_argument('-n', '--name', action='store', 
+                        help='name of a process to monitor')
+    parser.add_argument('-c', '--cmd', action='store', nargs='+',
+                        help='command to execute') 
+
+    args = parser.parse_args(argv)
+
+    # check if only one of -p, -r, or -c is specified
+    nprogs = (0 if args.pid == None else 1)  + \
+             (0 if args.root == None else 1) + \
+             (0 if args.name== None else 1) + \
+             (0 if args.cmd == None else 1)
+    if nprogs != 1:
+        parser.print_help()
+        print("scmon: error: only one out of '-p', '-r', `-n`, or '-c'" \
+                "should be specified", file = sys.stderr)
+        exit(1)
+    return args
+
+if __name__ == "__main__":
+    args = get_cmd_options(sys.argv[1:])
+
+    run_syscall_trace(args)
+

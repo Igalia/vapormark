@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+import os
+import sys
+import subprocess
+import signal
+import glob
+import zlib
+import matplotlib.pyplot as plt
+import argparse
+
+def get_syscall_name(line):
+    at = line.find('(')
+    syscall = line[0:at]
+    if at == -1 or syscall.isalnum() == False:
+        return None
+    # further classify futex into futex wait and wake.
+    if syscall == "futex": 
+        if line.find("FUTEX_WAIT") > 0:
+            syscall = "futex::wait"
+        elif line.find("FUTEX_WAKE") > 0:
+            if line.find(") = 0") > 0:
+                syscall = "futex::wake:non-zero"
+            else:
+                syscall = "futex::wake:zero"
+        else:
+            syscall = "futex::other"
+    return syscall
+
+def get_strace_names(odir, log):
+    logs = os.path.join(odir, log + "-scmon.") + '*'
+    return logs
+
+def syscall_stat(odir, log):
+    stat = {}
+    logs = get_strace_names(odir, log)
+    for log in glob.glob(logs):
+        with open(log, 'r') as f:
+            for line in f:
+                syscall = get_syscall_name(line)
+                if syscall != None: 
+                    stat[syscall] = stat.get(syscall, 0) + 1
+
+    total = float(sum(stat.values()))
+    scr_list = [(s, c, float(c)/total * 100.0) for s, c in stat.items()]
+    scr_list.sort(key=lambda x: x[1], reverse=True)
+    return scr_list
+
+def get_log_name(args, out):
+    log = os.path.join(args.outdir, args.log) + "-scinsight-stat." + out
+    return log
+
+def hash_rgb_from_str(s):
+    h = zlib.crc32( bytes(s, 'utf-8') )
+    r = (h & 0x00FF00) >> 8
+    g = (h & 0xFF0000) >> 16
+    b = (h & 0x0000FF) >> 0
+    return (float(r)/0xFF, float(g)/0xFF, float(b)/0xFF)
+
+def gen_pie_chart(args, scr_list):
+    # unzip stat
+    sys_list, cnt_list, ratio_list = list(zip(*scr_list))
+    # label for each syscall
+    label_list = list( map(lambda t: "%s (%.2f%s)" % (t[0], t[1], "%"), 
+                           zip(sys_list, ratio_list)) )
+    # assign a color per syscall
+    rgb_list = list( map(lambda s: hash_rgb_from_str(s), sys_list) )
+
+    # clear canvas
+    plt.clf()
+    fig, ax = plt.subplots()
+    ax.pie(cnt_list, labels=label_list, colors=rgb_list)
+    fig_name = get_log_name(args, "svg")
+    plt.savefig(fig_name)
+
+def report_syscall_stat_in_csv(scr_list, f):
+    print("%s, %s, %s" % ("{0:^20}".format("syscall"),
+                          "{0:^20}".format("count"),
+                          "{0:^20}".format("ratio (%)")), file = f)
+
+    for s, c, r in scr_list:
+        print("%s, %s, %s" % ("{0:<20}".format(s),
+                              "{0:>20}".format(c),
+                              "{0:>20}".format("%.4f" % r)), file = f)
+
+def report_syscall_stat(args):
+    # collect stat
+    scr_list = syscall_stat(args.outdir, args.log)
+    # generate a pie chart in svg
+    gen_pie_chart(args, scr_list)
+    # report in csv
+    with open(get_log_name(args, "csv"), "w") as f:
+        report_syscall_stat_in_csv(scr_list, f)
+        if args.quiet == False:
+            report_syscall_stat_in_csv(scr_list, sys.stdout)
+
+def get_cmd_options(argv):
+    parser = argparse.ArgumentParser(
+            prog = "scinsight",
+            description = "Report system call usage statistics of a program",)
+    parser.add_argument('-o', '--outdir', action='store', required=True,
+                        help='output directory') 
+    parser.add_argument('-l', '--log', action='store', required=True,
+                        help='log file prefix' ) 
+    parser.add_argument('-q', '--quiet', action='store_true',
+                        help='do not print result to stdout' ) 
+
+    args = parser.parse_args(argv)
+    return args
+
+if __name__ == "__main__":
+    args = get_cmd_options(sys.argv[1:])
+    report_syscall_stat(args)
+
+

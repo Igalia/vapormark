@@ -1,0 +1,122 @@
+#!/usr/bin/env python3
+import os
+import sys
+import subprocess
+import signal
+import glob
+import argparse
+import psutil
+
+mon_procs = []
+
+def ignore_term_signals(): 
+    term_signals = (signal.SIGTERM, signal.SIGINT, signal.SIGABRT, 
+                    signal.SIGBUS, signal.SIGILL, signal.SIGSEGV, 
+                    signal.SIGHUP)
+    for s in term_signals: 
+        # do nothing upon kill signals for graceful exit
+        signal.signal(s, lambda signum, frame: None)
+
+def get_log_name(args, mon):
+    log = os.path.join(args.outdir,
+                       args.log + "-procmon-" + mon + "__.log")
+    return log
+
+def run_procmons(args):
+    # prep for gracefil termination
+    ignore_term_signals()
+
+    # prep for logging
+    subprocess.Popen("mkdir -p " + args.outdir,
+                     shell=True, stdout=None, stderr=None).wait()
+    outdir = args.outdir
+
+    # prep comand line for each background monitor
+    sh_cmds = []
+    #   -s, --sched
+    if args.sched:
+        log = get_log_name(args, "sched")
+        dat = log + ".dat"
+        sh_cmd = "trace-cmd record -e sched_wakeup -o %s > /dev/null" % dat
+        sh_cmds.append(sh_cmd)
+    #   -c, --cstate
+    if args.cstate:
+        log = get_log_name(args, "cstate")
+        sh_cmd = "cpupower monitor sleep 36500d > " + log
+        sh_cmds.append(sh_cmd)
+    #   -e, --energy
+    if args.energy:
+        log = get_log_name(args, "energy")
+        sh_cmd = "perf stat -a --per-socket -e power/energy-pkg/ 2>" + log
+        sh_cmds.append(sh_cmd)
+    #   -p, --perf
+    if args.perf:
+        log = get_log_name(args, "perf")
+        sh_cmd = "perf stat -a 2>" + log
+        sh_cmds.append(sh_cmd)
+
+    # launch background monitors
+    for sh_cmd in sh_cmds:
+        p = subprocess.Popen(sh_cmd, shell=True)
+        mon_procs.append(p)
+
+def wait_for_procmons(args):
+    # wait for the background processes
+    for p in mon_procs:
+        p.wait()
+
+    # if '--sched' is on, generates a report using 'trace-cmd'
+    if args.sched:
+        log = get_log_name(args, "sched")
+        dat = log + ".dat"
+        sh_cmd = "trace-cmd report -i %s > %s" % (dat, log)
+        p = subprocess.Popen(sh_cmd, shell=True)
+        p.wait()
+
+def get_cmd_options(argv):
+    parser = argparse.ArgumentParser(
+            prog = "procmon",
+            description = "Collect CPU statistics and system-wide scheduling statistics",
+            epilog = "procmon internally uses "\
+                     "'trace-cmd', 'cpupower', and 'perf'. "\
+                     "It stores statistics to {outdir}/{log}-*-perfmon*.csv.")
+    parser.add_argument('-o', '--outdir', action='store', required=True,
+                        help='output directory') 
+    parser.add_argument('-l', '--log', action='store', required=True,
+                        help='log file prefix') 
+
+    parser.add_argument('-s', '--sched', action='store_true',
+                        help='trace wake-up events of process scheduler') 
+    parser.add_argument('-c', '--cstate', action='store_true',
+                        help='trace c-state of all CPUs') 
+    parser.add_argument('-e', '--energy', action='store_true',
+                        help='trace energy consumption of all CPUs') 
+    parser.add_argument('-p', '--perf', action='store_true',
+                        help='trace performance statistics of all CPUs') 
+
+    parser.add_argument('-a', '--all', action='store_true',
+                        help='trace all statistics') 
+    args = parser.parse_args(argv)
+
+    # sanity check of arguments
+    if args.all:
+        (args.sched, args.cstate, args.energy, args.perf) = \
+                (True, True, True, True)
+    nopts = (0 if args.sched == None else 1)  + \
+            (0 if args.cstate == None else 1) + \
+            (0 if args.energy == None else 1) + \
+            (0 if args.perf == None else 1)
+    if nopts == 0:
+        parser.print_help()
+        print("procmon: error: at least one out of '-s', '-c', `-e`, or '-p'" \
+                "should be specified", file = sys.stderr)
+        exit(1)
+    return args
+
+if __name__ == "__main__":
+    args = get_cmd_options(sys.argv[1:])
+    run_procmons(args)
+    wait_for_procmons(args)
+
+
+

@@ -1,0 +1,179 @@
+#!/usr/bin/env python3
+import os
+import sys
+import argparse
+import csv
+import matplotlib.pyplot as plt
+
+class time_serise:
+    time_serise = []
+    cdf = []
+    num = 0
+
+    def __init__(self, ts):
+        self.time_serise = ts
+        self.cdf = ts.copy()
+        self.cdf.sort()
+        self.num = len(ts)
+
+    def get_min(self):
+        return self.get_percentile(0.0)
+
+    def get_nmax(self):
+        return self.get_percentile(100.0)
+
+    def get_median(self):
+        return self.get_percentile(50.0)
+
+    def get_percentile(self, p):
+        # p = [0:100]
+        i = round( float(self.num - 1) * (p / 100.0) )
+        return self.cdf[i]
+
+    def get_average(self):
+        return sum(self.cdf) / self.num
+
+def load_mango_csv(csv_name):
+    def get_sys_info(csv_rd):
+        sys_info = {}
+        keys = rd.__next__()
+        values = rd.__next__()
+        for (k, v) in zip(keys, values):
+            sys_info[k] = v
+        return sys_info
+
+    with open(csv_name, 'r') as f:
+        rd = csv.reader(f)
+        try:
+            # parse system information
+            sys_info = get_sys_info(rd)
+            # transpose a row-oriented format to column-oriented format
+            cols = list( map(lambda c: [c], rd.__next__()) )
+            for row in rd:
+                for (i, elm) in enumerate(row):
+                    cols[i].append( float(elm) )
+        except csv.Error as e:
+            sys.exit('Invalid CSV data at {}@{}: {}'.format( \
+                    csv_name, rd.line_num, e))
+        perf_data = {}
+        for cl in cols:
+            k, v = cl[0], time_serise( cl[1:] )
+            perf_data[k] = v
+        return (sys_info, perf_data)
+
+def get_log_name(args, fea, out):
+    log = os.path.join(args.outdir,
+                       args.prefix + "-ginsight-" + fea + "." + out)
+    return log
+
+def gen_cdf_fig(args, fea, ts, pss, title, x_label, y_label):
+    # clear canvas
+    plt.clf()
+    # plot cdf
+    plt.plot(range(ts.num), ts.cdf, label='CDF', 
+             linewidth=1.5, color='black', marker='*')
+    # plot stats
+    y = ts.get_average()
+    plt.plot([0, ts.num], [y, y], label="Average: %.1f" % y)
+    for p, l in pss:
+        y = ts.get_percentile(p)
+        plt.plot([0, ts.num], [y, y], label=l + ": %.1f" % y)
+
+    # decoration
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.title(title)
+    plt.legend()
+
+    y97 = ts.get_percentile(97.0)
+    y100 = ts.get_percentile(100.0)
+    if (y97 * 10.0) < y100:
+        plt.ylim(top = y97 * 2)
+
+    # save to the file
+    fig_name = get_log_name(args, fea, "svg")
+    plt.savefig(fig_name)
+
+def gen_cdf_csv(args, ts, pss, y_label, f):
+    # header
+    print("%s, %s" % ("{0:^20}".format("Stat"), "{0:^20}".format(y_label)), 
+          file = f )
+
+    # stat
+    y = ts.get_average()
+    print("%s, %s" % ("{0:<20}".format("Average"), "{0:>20}".format("%.4f" % y)),
+          file = f)
+    for p, l in pss:
+        y = ts.get_percentile(p)
+        print("%s, %s" % ("{0:<20}".format(l), "{0:>20}".format("%.4f" % y)),
+              file = f)
+    low1 = ts.get_percentile(1.0)
+    med  = ts.get_percentile(50.0)
+    y = low1 / med
+    print("%s, %s" % ("{0:<20}".format("Low1-Med ratio"), 
+                      "{0:>20}".format("%.4f" % y)),
+          file = f)
+
+def report_stat(args, sys_info, perf_data):
+    class report_conf:
+        key = ""
+        pss = []
+        title = ""
+        x_label = ""
+        y_label = ""
+        def __init__(self, k, p, t, x, y):
+            self.key = k
+            self.pss = p
+            self.title = t
+            self.x_label = x
+            self.y_label = y
+
+    confs = [report_conf("fps", 
+                         [(50.0, "Median"), (0.0, "Min"), (100.0, "Max"),
+                          (0.1, "Low 0.1%"), (1.0, "Low 1%"), (97.0, "Low 97%"),],
+                         "", "frames", "FPS"),
+             report_conf("frametime",
+                         [(50.0, "Median"), (0.0, "Min"), (100.0, "Max"),
+                          (0.1, "Low 0.1%"), (1.0, "Low 1%"), (97.0, "Low 97%"),],
+                         "", "frames", "frametime (usec)"),
+             report_conf("cpu_load",
+                         [(50.0, "Median"), (0.0, "Min"), (100.0, "Max")],
+                         "", "", "cpu load (%)"),
+             report_conf("gpu_load",
+                         [(50.0, "Median"), (0.0, "Min"), (100.0, "Max")],
+                         "", "", "gpu load (%)"),
+             report_conf("ram_used", 
+                         [(50.0, "Median"), (0.0, "Min"), (100.0, "Max")], 
+                         "", "", "ram used (GB)"),]
+
+    for c in confs:
+        ts = perf_data[c.key]
+        gen_cdf_fig(args, c.key, ts, c.pss, c.title, c.x_label, c.y_label)
+        log = get_log_name(args, c.key, "csv")
+        with open(log, 'w') as f:
+           gen_cdf_csv(args, ts, c.pss, c.y_label, f)
+           if args.quiet == False:
+               gen_cdf_csv(args, ts, c.pss, c.y_label, sys.stdout)
+
+def get_cmd_options(argv):
+    parser = argparse.ArgumentParser(
+            prog = "ginsight",
+            description = "Generarte a report from MangoHud log")
+    parser.add_argument('-l', '--log', action='store', required=True,
+                        help='MangoHud log file in a CSV format') 
+    parser.add_argument('-o', '--outdir', action='store', required=True,
+                        help='output directory') 
+    parser.add_argument('-p', '--prefix', action='store', required=True,
+                        help='output file prefix') 
+    parser.add_argument('-q', '--quiet', action='store_true',
+                        help='do not print result to stdout' ) 
+    args = parser.parse_args(argv)
+    return args
+
+if __name__ == "__main__":
+    args = get_cmd_options(sys.argv[1:])
+    sys_info, perf_data = load_mango_csv(args.log)
+    report_stat(args, sys_info, perf_data)
+
+
+
