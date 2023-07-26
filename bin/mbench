@@ -24,6 +24,9 @@ class color:
 def print_log(msg):
     print(color.BLUE + "# [mbench] " + msg + color.ENDC)
 
+def print_warning(msg):
+    print(color.FAIL + "# [mbench] " + msg + color.ENDC)
+
 def ignore_term_signals(): 
     term_signals = (signal.SIGTERM, signal.SIGINT, signal.SIGABRT, 
                     signal.SIGBUS, signal.SIGILL, signal.SIGSEGV, 
@@ -55,6 +58,8 @@ def kill_all(parent):
         pass
 
 def run_bench(args):
+    # check performcne interference
+    check_interference(args)
     # prep for gracefil termination
     ignore_term_signals()
 
@@ -93,6 +98,35 @@ def wait_for_tasks(args):
     for p in running_tasks[1:]:
         kill_all(p)
 
+def ps_exist(pname):
+    for p in psutil.process_iter():
+       try:
+           pinfo = p.as_dict(attrs=['pid', 'name'])
+           if (pinfo['name'] == pname):
+               return True
+       except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+           pass
+    return False
+
+def check_interference(args):
+    ret = False
+
+    # check option
+    if args.procmon:
+        print_warning("-p will affect the benchmarking accuracy.")
+        ret = True
+
+    # heavy steam os tasks
+    heavy_bg_tasks = ["steam", "mangoapp", "gamemoded", 
+                      "gamescope", "steamwebhelper"]
+    for t in heavy_bg_tasks:
+        if ps_exist(t): 
+            print_warning("A heavy background task, %s, is detected. " \
+                    "It will interfere the accuracy of benchmark." % t)
+            ret = True
+    return ret
+
+
 def expand_args_config(args):
     # sanity check
     if args.fg != None or args.bg != None:
@@ -121,11 +155,10 @@ def get_cmd_options(argv):
     parser = argparse.ArgumentParser(
             prog = "mbench",
             description = "Run a micro-benchmark with a pre-configured setting",
-            epilog = color.WARNING + "Performance monitoring (-p) WILL " \
-                    "interfere the results of micro-benchmark. Do NOT use " \
-                    "-p when you collect performance results. Instead, run the " \
-                    "same benchmark twice: one without profiling for performance " \
-                    "comparison and another with profiling for analysis." + color.ENDC)
+            epilog = color.WARNING + 
+            """
+Performance monitoring (-p) WILL interfere the results of micro-benchmark. Do NOT use -p when you collect performance results. Instead, run the same benchmark twice: one without profiling for performance comparison and another with profiling for analysis. Also, make sure there is no heavy background task running.
+            """ + color.ENDC)
     parser.add_argument('-o', '--outdir', action='store', required=True,
                         help='output directory') 
     parser.add_argument('-l', '--log', action='store', required=True,
