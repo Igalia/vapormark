@@ -8,7 +8,6 @@ import argparse
 import psutil
 
 cur_dir = os.path.dirname(__file__)
-running_time = 90
 running_tasks = []
 
 class color:
@@ -169,8 +168,8 @@ Performance monitoring (-p) WILL interfere the results of micro-benchmark. Do NO
                         help='command line of a foreground task for benchmarking') 
     parser.add_argument('-c', '--config', action='store',
                         help='run a benchmark with preconfigured setting: `schbench50`, `schbench100`, and `schbench200`, each of which runs `schbench` with 50%%, 100%%, and 200%% CPU utilization, respectively')
-    parser.add_argument('-r', '--runtime', action='store', type=int, default=90,
-                        help='benchmark running time in seconds (default = 90sec)') 
+    parser.add_argument('-r', '--runtime', action='store', type=int, default=180,
+                        help='benchmark running time in seconds (default = 180sec)') 
     parser.add_argument('-p', '--procmon', action='store_true',
                         help='run with profiling on') 
     args = parser.parse_args(argv)
