@@ -85,7 +85,7 @@ procmon internally uses 'trace-cmd', 'cpupower', and 'perf'. It stores statistic
 ```
 
 #### `mbench`: running a micro-benchmark
-`mbench` is a wrapper which runs `schbench` with a pre-configured settings. For convenience, it launches `procmon` if necessary. However, to get accurate performance results, it is recommended `mbench` with and without `procmon`.
+`mbench` is a wrapper which runs `schbench` with a pre-configured settings. For convenience, it launches `procmon` if necessary. However, to get accurate performance results, it is recommended `mbench` with and without `procmon`. Also, make sure there is no heavy background tasks: for example, in `SteamOS`, `steam`, `mangoapp`, `gamemoded`, `gamescope`, and `steamwebhelper`.
 
 ```
 usage: mbench [-h] -o OUTDIR -l LOG [-b BG] [-f FG] [-c CONFIG] [-r RUNTIME] [-p]
@@ -109,7 +109,8 @@ options:
 
 Performance monitoring (-p) WILL interfere the results of micro-benchmark. Do NOT use -p when 
 you collect performance results. Instead, run the same benchmark twice: one without profiling 
-for performance comparison and another with profiling for analysis.
+for performance comparison and another with profiling for analysis. Also, make sure there is 
+no heavy background task running. 
 ```
 
 #### `MangoHud`: measuring FPS, CPU/GPU utilization, etc.
