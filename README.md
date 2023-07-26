@@ -1,4 +1,4 @@
-`vapormark` is a benchmark framework developed for measuring various performance metrics (e.g., throughput, latency, and tail latency) and the process states (e.g., backend stall, energy consumption) while running a program on Linux. It is especially targets for `SteamOS` -- a Linux based gaming device -- but the most features are genetically useful regular Linux environments.
+`vapormark` is a benchmark framework developed for measuring various performance metrics (e.g., throughput, latency, and tail latency) and the process states (e.g., backend stall, energy consumption) while running a program on Linux. It especially targets for `SteamOS` -- a Linux based gaming device -- but the most features are genetically useful regular Linux environments.
 
 
 Three Phases
