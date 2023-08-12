@@ -4,6 +4,7 @@ import sys
 import argparse
 import csv
 import matplotlib.pyplot as plt
+import zlib
 
 class time_serise:
     time_serise = []
@@ -66,9 +67,91 @@ def get_log_name(args, fea, out):
                        args.prefix + "-ginsight-" + fea + "." + out)
     return log
 
-def gen_cdf_fig(args, fea, ts, pss, title, x_label, y_label):
-    # clear canvas
+def reset_plot():
+    plt.style.use('default')
+    plt.rcParams['figure.figsize'] = (3.5, 3)
+    plt.rcParams['font.size'] = 7
     plt.clf()
+
+def hash_rgb_from_str(s):
+    h = zlib.crc32( bytes(s, 'utf-8') )
+    g = (h & 0xFF0000) >> 16
+    b = (h & 0x0000FF) >> 0
+    r = (h & 0x00FF00) >> 8
+    return (float(r)/0xFF, float(g)/0xFF, float(b)/0xFF)
+
+def gen_dist_fig(args, fea, ts, pss, title, x_label, y_label, min_max):
+    # prepare canvas
+    reset_plot()
+    fig, axs = plt.subplots(nrows=2, ncols=1, figsize=(3.5, 6.5))
+
+    # 1) violin plot
+    # - convert pss to quantile for violin plot
+    quan = []
+    for ps in pss:
+        p, k = ps
+        quan.append( p / 100.0 )
+    # - plot
+    ax = axs[0]
+    violin = ax.violinplot([ts.time_serise], showmeans=True,  quantiles=[ quan ])
+    violin['bodies'][0].set_facecolor( hash_rgb_from_str(y_label) )
+    # - set title
+    ax.set_title(title)
+    # - decoration
+    ax.set_ylim(bottom = min_max[0], top = min_max[1])
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+
+    # 2) cdf plot
+    # - plot
+    ax = axs[1]
+    ax.plot(range(ts.num), ts.cdf, label='CDF', 
+            linewidth=1.5, color='black', marker='*')
+    # - plot stats
+    y = ts.get_average()
+    ax.plot([0, ts.num], [y, y], label="Average: %.1f" % y)
+    for p, l in pss:
+        y = ts.get_percentile(p)
+        ax.plot([0, ts.num], [y, y], label=l + ": %.1f" % y)
+    # - decoration
+    ax.set_ylim(bottom = min_max[0], top = min_max[1])
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    ax.legend()
+
+    # save to the file
+    fig_name = get_log_name(args, fea, "svg")
+    plt.savefig(fig_name)
+
+def gen_violin_fig(args, fea, ts, pss, title, x_label, y_label, min_max):
+    # clear canvas
+    reset_plot()
+
+    # pss to quantile
+    quan = []
+    for ps in pss:
+        p, k = ps
+        quan.append( p / 100.0 )
+
+    # plot
+    violin = plt.violinplot([ts], showmeans=True,  quantiles=[ quan ])
+    violin['bodies'][0].set_facecolor( hash_rgb_from_str(y_label) )
+
+    # decoration
+    plt.ylim(bottom = min_max[0], top = min_max[1])
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.title(title)
+
+    # save to the file
+    fig_name = get_log_name(args, fea + "-violin", "svg")
+    plt.savefig(fig_name)
+
+
+def gen_cdf_fig(args, fea, ts, pss, title, x_label, y_label, min_max):
+    # clear canvas
+    reset_plot()
+
     # plot cdf
     plt.plot(range(ts.num), ts.cdf, label='CDF', 
              linewidth=1.5, color='black', marker='*')
@@ -80,18 +163,14 @@ def gen_cdf_fig(args, fea, ts, pss, title, x_label, y_label):
         plt.plot([0, ts.num], [y, y], label=l + ": %.1f" % y)
 
     # decoration
+    plt.ylim(bottom = min_max[0], top = min_max[1])
     plt.xlabel(x_label)
     plt.ylabel(y_label)
     plt.title(title)
     plt.legend()
 
-    y97 = ts.get_percentile(97.0)
-    y100 = ts.get_percentile(100.0)
-    if (y97 * 10.0) < y100:
-        plt.ylim(top = y97 * 2)
-
     # save to the file
-    fig_name = get_log_name(args, fea, "svg")
+    fig_name = get_log_name(args, fea + "-cdf", "svg")
     plt.savefig(fig_name)
 
 def gen_cdf_csv(args, ts, pss, y_label, f):
@@ -121,34 +200,42 @@ def report_stat(args, sys_info, perf_data):
         title = ""
         x_label = ""
         y_label = ""
-        def __init__(self, k, p, t, x, y):
+        min_max = (0.0, 0.0)
+        def __init__(self, k, p, t, x, y, mX):
             self.key = k
             self.pss = p
             self.title = t
             self.x_label = x
             self.y_label = y
+            self.min_max = mX
 
+    title = args.prefix
     confs = [report_conf("fps", 
                          [(50.0, "Median"), (0.0, "Min"), (100.0, "Max"),
                           (0.1, "Low 0.1%"), (1.0, "Low 1%"), (97.0, "Low 97%"),],
-                         "", "frames", "FPS"),
+                         title, "frames", "FPS", (0.0, 120)),
              report_conf("frametime",
                          [(50.0, "Median"), (0.0, "Min"), (100.0, "Max"),
-                          (0.1, "Low 0.1%"), (1.0, "Low 1%"), (97.0, "Low 97%"),],
-                         "", "frames", "frametime (usec)"),
+                          (99.0, "High 1%"), (99.9, "High 0.1%"), ],
+                         title, "frames", "frametime (usec)", (0.0, 200000)),
              report_conf("cpu_load",
                          [(50.0, "Median"), (0.0, "Min"), (100.0, "Max")],
-                         "", "", "cpu load (%)"),
+                         title, "", "cpu load (%)", (0.0, 100.0)),
              report_conf("gpu_load",
                          [(50.0, "Median"), (0.0, "Min"), (100.0, "Max")],
-                         "", "", "gpu load (%)"),
+                         title, "", "gpu load (%)", (0.0, 100.0)),
              report_conf("ram_used", 
                          [(50.0, "Median"), (0.0, "Min"), (100.0, "Max")], 
-                         "", "", "ram used (GB)"),]
+                         title, "", "ram used (GB)", (0.0, 16.0)),]
 
     for c in confs:
         ts = perf_data[c.key]
-        gen_cdf_fig(args, c.key, ts, c.pss, c.title, c.x_label, c.y_label)
+        # generate violin plot
+        gen_violin_fig(args, c.key, ts.time_serise, c.pss, c.title, c.x_label, c.y_label, c.min_max)
+        # generate cdf plot
+        gen_cdf_fig(args, c.key, ts, c.pss, c.title, c.x_label, c.y_label, c.min_max)
+        gen_dist_fig(args, c.key, ts, c.pss, c.title, c.x_label, c.y_label, c.min_max)
+        # generate cdf stat
         log = get_log_name(args, c.key, "csv")
         with open(log, 'w') as f:
            gen_cdf_csv(args, ts, c.pss, c.y_label, f)
