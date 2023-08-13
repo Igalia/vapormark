@@ -543,6 +543,43 @@ def gen_report_gpu_util(args, app_stats, f):
         gen_md_diff_tbl(s, "-ginsight-gpu_load.svg", s.gpu_util, False, f)
     print("\n\n", file = f)
 
+def gen_report_ginsight_overview(args, app_stats, f):
+    # print header
+    #  |      | conf1 | conf2 | conf3 |
+    #  | ---- | ----- | ----- | ----- |
+    print("### Performance overview\n", file = f)
+    l1, l2 = "|      |", "| :----: |"
+    for s in app_stats:
+        l1 = l1 + " " + s.nick + " | "
+        l2 = l2 + " :---: | "
+    print(l1, file = f)
+    print(l2, file = f)
+
+    # print graphs
+    #  | FPS  | img1  | img2  | img3  |
+    #  | cpu  | img1  | img2  | img3  |
+    #  | gpu  | img1  | img2  | img3  |
+    #  | ram  | img1  | img2  | img3  |
+    class report_conf:
+        name = ""
+        suffix = ""
+        def __init__(self, n, s):
+            self.name = n
+            self.suffix = s
+
+    confs = [report_conf("FPS", "-ginsight-fps.svg"), 
+             report_conf("CPU", "-ginsight-cpu_load.svg"),
+             report_conf("GPU", "-ginsight-gpu_load.svg"),
+             report_conf("RAM", "-ginsight-ram_used.svg"),]
+    for c in confs:
+        l1 = "| " + c.name + " |"
+        for s in app_stats:
+            afil, rfil = get_res_path(s.ldir, s.prefix + c.suffix)
+            img = "![](" + rfil + ")"
+            l1 = l1 + " " + img + " | "
+        print(l1, file = f)
+    print("\n\n", file = f)
+
 def gen_report_ram_util(args, app_stats, f):
     s = app_stats[0]
     if s.ram_util.stat == None:
@@ -623,6 +660,7 @@ def gen_report(args, app_stats):
         gen_report_syscall(args, app_stats, f)
         gen_report_factorio(args, app_stats, f)
         gen_report_schbench(args, app_stats, f)
+        gen_report_ginsight_overview(args, app_stats, f)
         gen_report_fps(args, app_stats, f)
         gen_report_sched(args, app_stats, f)
         gen_report_cpu_util(args, app_stats, f)
