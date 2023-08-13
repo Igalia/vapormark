@@ -56,6 +56,11 @@ def hash_rgb_from_str(s):
     b = (h & 0x0000FF) >> 0
     return (float(r)/0xFF, float(g)/0xFF, float(b)/0xFF)
 
+def reset_plot():
+    plt.clf()
+    plt.style.use('default')
+    plt.rcParams['font.size'] = 7
+
 def gen_pie_chart(args, scr_list):
     # unzip stat
     sys_list, cnt_list, ratio_list = list(zip(*scr_list))
@@ -66,8 +71,8 @@ def gen_pie_chart(args, scr_list):
     rgb_list = list( map(lambda s: hash_rgb_from_str(s), sys_list) )
 
     # clear canvas
-    plt.clf()
-    fig, ax = plt.subplots()
+    reset_plot()
+    fig, ax = plt.subplots(figsize=(3.5,3))
     ax.pie(cnt_list, labels=label_list, colors=rgb_list)
     fig_name = get_log_name(args, "svg")
     plt.savefig(fig_name)
