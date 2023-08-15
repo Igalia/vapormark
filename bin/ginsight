@@ -238,15 +238,19 @@ def report_stat(args, sys_info, perf_data):
             self.y_label = y
             self.min_max = mX
 
+    # FIXME: ad-hoc code
+    y_fps= 1.0
+    if args.prefix == "troy-low-battle-benchmark":
+        y_fps= 2.0
     title = args.prefix
     confs = [report_conf("fps", 
                          [(50.0, "Median"), (0.0, "Min"), (100.0, "Max"),
                           (0.1, "Low 0.1%"), (1.0, "Low 1%"), (97.0, "Low 97%"),],
-                         title, "frames", "FPS", (0.0, 120)),
+                         title, "frames", "FPS", (0.0, 120.0 * y_fps)),
              report_conf("frametime",
                          [(50.0, "Median"), (0.0, "Min"), (100.0, "Max"),
                           (99.0, "High 1%"), (99.9, "High 0.1%"), ],
-                         title, "frames", "frametime (usec)", (0.0, 200000)),
+                         title, "frames", "frametime (usec)", (0.0, 200000.0)),
              report_conf("cpu_load",
                          [(50.0, "Median"), (0.0, "Min"), (100.0, "Max")],
                          title, "", "cpu load (%)", (0.0, 100.0)),
