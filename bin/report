@@ -428,13 +428,16 @@ def gen_md_diff_tbl(stat_app, suffix, st_item, baseline, f):
 
 def gen_report_config(args, app_stats, f):
     # title = prefix
+    print("``` {=html}", file = f)
+    print("<style>", file = f)
+    print("body { min-width: 80% !important; }", file = f)
+    print("</style>", file = f)
+    print("```", file = f)
+
     print("---", file = f)
     print("title: %s" % args.prefix, file = f)
     print("date: %s" % datetime.datetime.now(), file = f)
     print("---", file = f)
-    print("\n\n", file = f)
-
-    print("# %s\n" % args.prefix, file = f)
     print("\n\n", file = f)
 
     # #### Comparisons
@@ -674,7 +677,7 @@ def gen_report(args, app_stats):
     # convert the markdown report to html
     file_html = args.output + ".html"
     global cur_dir
-    cmd = "pandoc --standalone %s -o %s" % (file_md, file_html)
+    cmd = "pandoc --standalone --toc %s -o %s" % (file_md, file_html)
     print_log("Running %s" % cmd)
     p = subprocess.Popen(cmd, shell=True, stdout=None, stderr=None)
     p.wait()
