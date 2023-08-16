@@ -77,9 +77,7 @@ def get_cmd_options(argv):
     parser = argparse.ArgumentParser(
             prog = "procmon",
             description = "Collect CPU statistics and system-wide scheduling statistics",
-            epilog = "procmon internally uses "\
-                     "'trace-cmd', 'cpupower', and 'perf'. "\
-                     "It stores statistics to {outdir}/{log}-*-perfmon*.csv.")
+            epilog = "procmon internally uses 'trace-cmd', 'cpupower', and 'perf'.")
     parser.add_argument('-o', '--outdir', action='store', required=True,
                         help='output directory') 
     parser.add_argument('-l', '--log', action='store', required=True,

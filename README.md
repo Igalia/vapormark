@@ -80,8 +80,7 @@ options:
   -p, --perf            trace performance statistics of all CPUs
   -a, --all             trace all statistics
 
-procmon internally uses 'trace-cmd', 'cpupower', and 'perf'. It stores statistics to
-{outdir}/{log}-*-perfmon*.csv.
+procmon internally uses 'trace-cmd', 'cpupower', and 'perf'.
 ```
 
 #### `mbench`: running a micro-benchmark
