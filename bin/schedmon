@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+import os
+import sys
+import subprocess
+import signal
+import glob
+import argparse
+import psutil
+
+mon_procs = []
+
+def ignore_term_signals(): 
+    term_signals = (signal.SIGTERM, signal.SIGINT, signal.SIGABRT, 
+                    signal.SIGBUS, signal.SIGILL, signal.SIGSEGV, 
+                    signal.SIGHUP)
+    for s in term_signals: 
+        # do nothing upon kill signals for graceful exit
+        signal.signal(s, lambda signum, frame: None)
+
+def get_log_name(args, kind):
+    log = os.path.join(args.outdir,
+                       args.log + "-schedmon-" + kind+ "__.log")
+    return log
+
+def run_schedmon(args):
+    # prep for gracefil termination
+    ignore_term_signals()
+
+    # prep for logging
+    subprocess.Popen("mkdir -p " + args.outdir,
+                     shell=True, stdout=None, stderr=None).wait()
+    outdir = args.outdir
+
+    # launch a background monitor
+    log = get_log_name(args, "raw")
+    sh_cmd = "perf sched record -ag -o %s sleep 36500d" % log
+    p = subprocess.Popen(sh_cmd, shell=True)
+    mon_procs.append(p)
+
+def wait_for_schedmon(args):
+    # wait for the background processes
+    for p in mon_procs:
+        p.wait()
+
+    # prep comand line for report generation
+    sh_cmds = []
+    raw_log = get_log_name(args, "raw")
+    # - latency
+    log = get_log_name(args, "latency")
+    sh_cmd = "perf sched latency -i %s >  %s" % (raw_log, log)
+    sh_cmds.append(sh_cmd)
+    # - map
+    log = get_log_name(args, "map")
+    sh_cmd = "perf sched map -i %s >  %s" % (raw_log, log)
+    sh_cmds.append(sh_cmd)
+    # - timehist (full)
+    log = get_log_name(args, "timehist_full")
+    sh_cmd = "perf sched timehist -SMVwng -i %s >  %s" % (raw_log, log)
+    sh_cmds.append(sh_cmd)
+    # - timehist (short)
+    log = get_log_name(args, "timehist_short")
+    sh_cmd = "perf sched timehist -Sg     -i %s >  %s" % (raw_log, log)
+    sh_cmds.append(sh_cmd)
+
+    # launch background monitors
+    for sh_cmd in sh_cmds:
+        p = subprocess.Popen(sh_cmd, shell=True)
+        mon_procs.append(p)
+        p.wait()
+
+
+def get_cmd_options(argv):
+    parser = argparse.ArgumentParser(
+            prog = "schedmon",
+            description = "Collect the detailed scheduler activity internally using `perf sched`")
+    parser.add_argument('-o', '--outdir', action='store', required=True,
+                        help='output directory') 
+    parser.add_argument('-l', '--log', action='store', required=True,
+                        help='log file prefix') 
+    args = parser.parse_args(argv)
+
+    return args
+
+if __name__ == "__main__":
+    args = get_cmd_options(sys.argv[1:])
+    run_schedmon(args)
+    wait_for_schedmon(args)
+
