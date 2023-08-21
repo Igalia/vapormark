@@ -5,37 +5,8 @@ import argparse
 import csv
 import matplotlib.pyplot as plt
 import zlib
+import collections
 
-"""
-scheduling event
-================
-           time    cpu  012345678  task name                       wait time  sch delay   run time
-                                   [tid/pid]                          (msec)     (msec)     (msec)
---------------- ------  ---------  ------------------------------  ---------  ---------  ---------
-    1002.415883 [0000]  s          migration/0[19]                     0.000      0.010      0.015  next: dxvk-submit[4874]          smpboot_thread_fn <- kthread <- ret_from_fork
-
-migration event
-===============
-           time    cpu  012345678  task name                       wait time  sch delay   run time
-                                   [tid/pid]                          (msec)     (msec)     (msec)
---------------- ------  ---------  ------------------------------  ---------  ---------  ---------
-    1002.415874 [0000]   m           migration/0[19]                                                  migrated: perf[5083] cpu 0 => 1
-
-awake event
-===========
-           time    cpu  012345678  task name                       wait time  sch delay   run time
-                                   [tid/pid]                          (msec)     (msec)     (msec)
---------------- ------  ---------  ------------------------------  ---------  ---------  ---------
-    1002.416024 [0002]             perf[5083]                                                       awakened: migration/2[30]
-
-
-idle event
-==========
-           time    cpu  012345678  task name                       wait time  sch delay   run time
-                                   [tid/pid]                          (msec)     (msec)     (msec)
---------------- ------  ---------  ------------------------------  ---------  ---------  ---------
-    1002.416597 [0001]   i         <idle>                              0.000      0.000      0.009  next: Xorg:cs0[2192]          
-"""
 
 class ev_type:
     SCHED = 0
@@ -51,15 +22,35 @@ class ev_time:
         self.time = t
         self.cpu_id = c
 
+    def __repr__(self):
+        return "\t".join(["%.6f" % self.time, "[%d]" % self.cpu_id])
+
+
 class ev_task:
+    # per-class variables
+    task_dict = {} 
+
+    # per-instanace variables
     task_name = ""
     task_id   = 0
     parent_id = 0
+
+    @classmethod
+    def get_instance(cls, tname, tid, pid):
+        key = '^'.join([tname, str(tid), str(pid)])
+        inst = cls.task_dict.get(key)
+        if inst == None: 
+            inst = cls(tname, tid, pid)
+            cls.task_dict[key] = inst
+        return inst
 
     def __init__(self, tname, tid, pid):
         self.task_name = tname
         self.task_id = tid
         self.parent_id = pid
+
+    def __repr__(self):
+        return "%s[%d/%d]" % (self.task_name, self.task_id, self.parent_id)
 
 class ev_period:
     wait_time = 0.0
@@ -71,11 +62,31 @@ class ev_period:
         self.sch_delay = s
         self.run_time  = r
 
+    def __repr__(self):
+        return "\t".join(["%.3f" % self.wait_time, 
+                          "%.3f" % self.sch_delay,
+                          "%.3f" % self.run_time])
+
 class ev_callstack:
+    # per-class variables
+    stackframe_dict= {} 
+
+    # per-instanace variables
     stackframe = ""
+
+    @classmethod
+    def get_instance(cls, cs):
+        inst = cls.stackframe_dict.get(cs)
+        if inst == None: 
+            inst = cls(cs)
+            cls.stackframe_dict[cs] = inst
+        return inst
 
     def __init__(self, cs):
         self.stackframe = cs
+
+    def __repr__(self):
+        return self.stackframe
 
 class ev_sched:
     ty = ev_type.SCHED
@@ -83,12 +94,18 @@ class ev_sched:
     period = None
     cur_task  = None
     next_task = None 
+    callstack = None
 
-    def __init__(self, time, period, cur_task, next_task):
+    def __init__(self, time, period, cur_task, next_task, callstack):
         self.time = time
         self.period = period
         self.cur_task = cur_task
         self.next_task = next_task
+        self.callstack = callstack
+
+    def __repr__(self):
+        return "\t".join(["S", str(self.time), str(self.cur_task), str(self.period), 
+                          "=>", str(self.next_task), str(self.callstack)])
 
 class ev_idle:
     ty = ev_type.IDLE
@@ -100,28 +117,41 @@ class ev_idle:
         self.time = time
         self.next_task = next_task
 
+    def __repr__(self):
+        return "\t".join(["I", str(self.time), "<idle>", str(self.period), 
+                          str(self.next_task)])
+
 class ev_mig:
     ty = ev_type.MIG
     time   = None
     cur_task  = None
     migrated_task = None 
     to_cpu_id = 0
+
     def __init__(self, time, cur_task, migrated_task, to_cpu_id):
         self.time = time
         self.cur_task = cur_task
         self.migrated_task = migrated_task
         self.to_cpu_id = to_cpu_id
 
+    def __repr__(self):
+        return "\t".join(["M", str(self.time), str(self.cur_task), 
+                          "=>", str(self.migrated_task)])
+
 class ev_awake:
     ty = ev_type.AWAKE
     time   = None
     cur_task  = None
     awakened_task = None 
+
     def __init__(self, time, cur_task, awakened_task):
         self.time = time
         self.cur_task = cur_task
         self.awakened_task = awakened_task
 
+    def __repr__(self):
+        return "\t".join(["A", str(self.time), str(self.cur_task), 
+                          "=>", str(self.awakened_task)])
 
 def parse_ev_time(toks):
     time = float(toks[0])
@@ -139,6 +169,9 @@ def parse_ev_type(toks):
         return ev_type.AWAKE, toks
 
 def parse_ev_task(toks):
+    if toks[0] == "<idle>" or toks[0] == "swapper": 
+        return ev_task.get_instance(toks[0], 0, 0), toks[1:]
+    
     tstr = ""
     for i, t in enumerate(toks):
         if t[-1] == "]":
@@ -149,12 +182,13 @@ def parse_ev_task(toks):
 
     tsk_tok = tstr[:-1].split("[")
     tname = tsk_tok[0]
-    pid_tok = tsk_tok[1].split("/")
-    tid = int(pid_tok[0])
-    pid = 0
-    if len(pid_tok) == 2:
-        tid = int(pid_tok[1])
-    return ev_task(tname, tid, pid), toks
+    tid, pid = 0, 0
+    if len(tsk_tok) == 2:
+        pid_tok = tsk_tok[1].split("/")
+        tid = int(pid_tok[0])
+        if len(pid_tok) == 2: 
+            pid = int(pid_tok[1])
+    return ev_task.get_instance(tname, tid, pid), toks
 
 def parse_ev_period(toks):
     w = float(toks[0])
@@ -163,15 +197,15 @@ def parse_ev_period(toks):
     return ev_period(w, s, r), toks[3:]
 
 def parse_ev_callstack(toks):
-    stackframe = "".join(toks)
-    return ev_callstack(stackframe), []
+    stackframe = ' '.join(toks)
+    return ev_callstack.get_instance(stackframe), []
 
 def parse_ev_sched(toks, time):
     cur_task, toks = parse_ev_task(toks)
     period, toks = parse_ev_period(toks)
     next_task, toks = parse_ev_task(toks[1:]) # toks[0] should be 'next:'
     callstack, toks = parse_ev_callstack(toks)
-    return ev_sched(time, period, cur_task, next_task)
+    return ev_sched(time, period, cur_task, next_task, callstack)
 
 def parse_ev_idle(toks, time):
     period, toks = parse_ev_period(toks[1:])  # toks[0] should be '<idle>'
@@ -190,13 +224,55 @@ def parse_ev_awake(toks, time):
     return ev_awake(time, cur_task, awakened_task)
 
 def parse_ev_line(line):
-    parsers = {ev_type.SCHED:parse_ev_sched, ev_type.IDLE:parse_ev_idle, 
-               ev_type.MIG:parse_ev_mig,     ev_type.AWAKE:parse_ev_awake,}
+    parsers = {ev_type.SCHED: parse_ev_sched, ev_type.IDLE: parse_ev_idle, 
+               ev_type.MIG: parse_ev_mig,     ev_type.AWAKE: parse_ev_awake,}
 
     toks = line.split()
+    if len(toks) == 0:
+        return None
+
     time, toks = parse_ev_time(toks)
     ty, toks = parse_ev_type(toks)
     return parsers[ty](toks, time)
+
+def skip_column_header(f):
+    f.readline()
+    f.readline()
+    f.readline()
+
+def get_log_name(args, kind):
+    log = os.path.join(args.outdir,
+                       args.log + "-schedmon-" + kind+ "__.log")
+    return log
+
+def load_sched_events(f):
+    # - header
+    skip_column_header(f)
+
+    # - scheduling events
+    events = collections.OrderedDict()
+    for line in f:
+        ev = parse_ev_line(line)
+        if ev == None:
+            break
+        events[ev.time.time] = ev
+    return events
+
+def load_schedmon_timehist(args):
+    # get a log file name
+    log = get_log_name(args, "timehist_full")
+    if os.path.isfile(log) == False:
+        log = get_log_name(args, "timehist_short")
+
+    # parse the log
+    with open(log, "r") as f:
+        sched_events = load_sched_events(f)
+        # - Runtime summary
+        # - Terminated tasks:
+        # - Idle stats:
+        # - Overall smmary
+
+    return sched_events
 
 def get_cmd_options(argv):
     parser = argparse.ArgumentParser(
@@ -213,4 +289,7 @@ def get_cmd_options(argv):
 
 if __name__ == "__main__":
     args = get_cmd_options(sys.argv[1:])
+    sched_events = load_schedmon_timehist(args)
+    for time, ev in sched_events.items():
+        print(ev)
 
