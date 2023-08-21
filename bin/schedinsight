@@ -1,0 +1,216 @@
+#!/usr/bin/env python3
+import os
+import sys
+import argparse
+import csv
+import matplotlib.pyplot as plt
+import zlib
+
+"""
+scheduling event
+================
+           time    cpu  012345678  task name                       wait time  sch delay   run time
+                                   [tid/pid]                          (msec)     (msec)     (msec)
+--------------- ------  ---------  ------------------------------  ---------  ---------  ---------
+    1002.415883 [0000]  s          migration/0[19]                     0.000      0.010      0.015  next: dxvk-submit[4874]          smpboot_thread_fn <- kthread <- ret_from_fork
+
+migration event
+===============
+           time    cpu  012345678  task name                       wait time  sch delay   run time
+                                   [tid/pid]                          (msec)     (msec)     (msec)
+--------------- ------  ---------  ------------------------------  ---------  ---------  ---------
+    1002.415874 [0000]   m           migration/0[19]                                                  migrated: perf[5083] cpu 0 => 1
+
+awake event
+===========
+           time    cpu  012345678  task name                       wait time  sch delay   run time
+                                   [tid/pid]                          (msec)     (msec)     (msec)
+--------------- ------  ---------  ------------------------------  ---------  ---------  ---------
+    1002.416024 [0002]             perf[5083]                                                       awakened: migration/2[30]
+
+
+idle event
+==========
+           time    cpu  012345678  task name                       wait time  sch delay   run time
+                                   [tid/pid]                          (msec)     (msec)     (msec)
+--------------- ------  ---------  ------------------------------  ---------  ---------  ---------
+    1002.416597 [0001]   i         <idle>                              0.000      0.000      0.009  next: Xorg:cs0[2192]          
+"""
+
+class ev_type:
+    SCHED = 0
+    IDLE  = 1
+    MIG   = 2
+    AWAKE = 3
+
+class ev_time:
+    time   = 0.0 
+    cpu_id = 0
+
+    def __init__(self, t, c):
+        self.time = t
+        self.cpu_id = c
+
+class ev_task:
+    task_name = ""
+    task_id   = 0
+    parent_id = 0
+
+    def __init__(self, tname, tid, pid):
+        self.task_name = tname
+        self.task_id = tid
+        self.parent_id = pid
+
+class ev_period:
+    wait_time = 0.0
+    sch_delay = 0.0
+    run_time  = 0.0
+
+    def __init__(self, w, s, r):
+        self.wait_time = w
+        self.sch_delay = s
+        self.run_time  = r
+
+class ev_callstack:
+    stackframe = ""
+
+    def __init__(self, cs):
+        self.stackframe = cs
+
+class ev_sched:
+    ty = ev_type.SCHED
+    time   = None
+    period = None
+    cur_task  = None
+    next_task = None 
+
+    def __init__(self, time, period, cur_task, next_task):
+        self.time = time
+        self.period = period
+        self.cur_task = cur_task
+        self.next_task = next_task
+
+class ev_idle:
+    ty = ev_type.IDLE
+    time = None
+    period = None
+    next_task = None 
+
+    def __init__(self, time, period, next_task):
+        self.time = time
+        self.next_task = next_task
+
+class ev_mig:
+    ty = ev_type.MIG
+    time   = None
+    cur_task  = None
+    migrated_task = None 
+    to_cpu_id = 0
+    def __init__(self, time, cur_task, migrated_task, to_cpu_id):
+        self.time = time
+        self.cur_task = cur_task
+        self.migrated_task = migrated_task
+        self.to_cpu_id = to_cpu_id
+
+class ev_awake:
+    ty = ev_type.AWAKE
+    time   = None
+    cur_task  = None
+    awakened_task = None 
+    def __init__(self, time, cur_task, awakened_task):
+        self.time = time
+        self.cur_task = cur_task
+        self.awakened_task = awakened_task
+
+
+def parse_ev_time(toks):
+    time = float(toks[0])
+    cpu_id = int(toks[1][1:-1])
+    return ev_time(time, cpu_id), toks[2:]
+    
+def parse_ev_type(toks):
+    if toks[0] == "s":
+        return ev_type.SCHED, toks[1:]
+    elif toks[0] == "i":
+        return ev_type.IDLE, toks[1:]
+    elif toks[0] == "m":
+        return ev_type.MIG, toks[1:]
+    else:
+        return ev_type.AWAKE, toks
+
+def parse_ev_task(toks):
+    tstr = ""
+    for i, t in enumerate(toks):
+        if t[-1] == "]":
+            tstr = tstr + t
+            toks = toks[i+1:]
+            break
+        tstr = tstr + t + " "
+
+    tsk_tok = tstr[:-1].split("[")
+    tname = tsk_tok[0]
+    pid_tok = tsk_tok[1].split("/")
+    tid = int(pid_tok[0])
+    pid = 0
+    if len(pid_tok) == 2:
+        tid = int(pid_tok[1])
+    return ev_task(tname, tid, pid), toks
+
+def parse_ev_period(toks):
+    w = float(toks[0])
+    s = float(toks[1])
+    r = float(toks[2])
+    return ev_period(w, s, r), toks[3:]
+
+def parse_ev_callstack(toks):
+    stackframe = "".join(toks)
+    return ev_callstack(stackframe), []
+
+def parse_ev_sched(toks, time):
+    cur_task, toks = parse_ev_task(toks)
+    period, toks = parse_ev_period(toks)
+    next_task, toks = parse_ev_task(toks[1:]) # toks[0] should be 'next:'
+    callstack, toks = parse_ev_callstack(toks)
+    return ev_sched(time, period, cur_task, next_task)
+
+def parse_ev_idle(toks, time):
+    period, toks = parse_ev_period(toks[1:])  # toks[0] should be '<idle>'
+    next_task, toks = parse_ev_task(toks[1:]) # toks[0] should be 'next:'
+    return ev_idle(time, period, next_task)
+
+def parse_ev_mig(toks, time):
+    cur_task, toks = parse_ev_task(toks)
+    migrated_task, toks = parse_ev_task(toks[1:])  # toks[0] should be "migrated:"
+    to_cpu_id = int(toks[3]) # toks[] = ["cpu", from_cpu_id, "=>", to_cpu_id]
+    return ev_mig(time, cur_task, migrated_task, to_cpu_id)
+
+def parse_ev_awake(toks, time):
+    cur_task, toks = parse_ev_task(toks)
+    awakened_task, toks = parse_ev_task(toks[1:])  # toks[0] should be "awakened:"
+    return ev_awake(time, cur_task, awakened_task)
+
+def parse_ev_line(line):
+    parsers = {ev_type.SCHED:parse_ev_sched, ev_type.IDLE:parse_ev_idle, 
+               ev_type.MIG:parse_ev_mig,     ev_type.AWAKE:parse_ev_awake,}
+
+    toks = line.split()
+    time, toks = parse_ev_time(toks)
+    ty, toks = parse_ev_type(toks)
+    return parsers[ty](toks, time)
+
+def get_cmd_options(argv):
+    parser = argparse.ArgumentParser(
+            prog = "schedinsight",
+            description = "Report the detailed analysis of scheduliing activities collected by `perf sched record`",)
+    parser.add_argument('-o', '--outdir', action='store', required=True,
+                        help='output directory') 
+    parser.add_argument('-l', '--log', action='store', required=True,
+                        help='log file prefix') 
+    parser.add_argument('-q', '--quiet', action='store_true',
+                        help='do not print result to stdout' ) 
+    args = parser.parse_args(argv)
+    return args
+
+if __name__ == "__main__":
+    args = get_cmd_options(sys.argv[1:])
+
