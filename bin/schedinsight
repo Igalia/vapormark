@@ -115,11 +115,12 @@ class ev_idle:
 
     def __init__(self, time, period, next_task):
         self.time = time
+        self.period = period
         self.next_task = next_task
 
     def __repr__(self):
         return "\t".join(["I", str(self.time), "<idle>", str(self.period), 
-                          str(self.next_task)])
+                          "=>", str(self.next_task)])
 
 class ev_mig:
     ty = ev_type.MIG
@@ -267,12 +268,22 @@ def load_schedmon_timehist(args):
     # parse the log
     with open(log, "r") as f:
         sched_events = load_sched_events(f)
-        # - Runtime summary
-        # - Terminated tasks:
-        # - Idle stats:
-        # - Overall smmary
+        # - TODO: Runtime summary
+        # - TODO: Terminated tasks:
+        # - TODO: Idle stats:
+        # - TODO: Overall smmary
 
     return sched_events
+
+def filter_sched_events(events, filter_fn, filter_data):
+    filtered_events = collections.OrderedDict()
+
+    for time, ev in events.items():
+        if filter_fn(ev, filter_data) == True:
+            filtered_events[time] = ev
+
+    return filtered_events
+
 
 def get_cmd_options(argv):
     parser = argparse.ArgumentParser(
@@ -289,7 +300,8 @@ def get_cmd_options(argv):
 
 if __name__ == "__main__":
     args = get_cmd_options(sys.argv[1:])
-    sched_events = load_schedmon_timehist(args)
-    for time, ev in sched_events.items():
+    events = load_schedmon_timehist(args)
+    events = filter_sched_events(events, lambda e, d: e.ty == ev_type.IDLE, None)
+    for time, ev in events.items():
         print(ev)
 
