@@ -42,6 +42,11 @@ class ev_task:
     parent_id = 0
     color = (0.0, 0.0, 0.0)
 
+    # task indexes to events
+    ctask_ty_events = None  # cur_task:ty -> [events]
+    ctask_cs_events = None  # cur_task:cs -> [events]
+    ntask_events = None     # next_task   -> [events]
+
     @classmethod
     def get_instance(cls, tname, tid, pid):
         key = '^'.join([tname, str(tid), str(pid)])
@@ -51,11 +56,34 @@ class ev_task:
             cls.task_dict[key] = inst
         return inst
 
+    def link_ctask(self, ev, cs = None):
+        # - cur_task    -> [events]
+        ty_events = self.ctask_ty_events.get(ev.ty)
+        if ty_events == None:
+            ty_events = self.ctask_ty_events[ev.ty] = collections.OrderedDict()
+        self.ctask_ty_events[ev.time.time] = ev
+        # - cur_task:cs -> [events]
+        cs_events = self.ctask_cs_events.get(cs)
+        if cs_events == None:
+            cs_events = self.ctask_cs_events[cs] = collections.OrderedDict()
+        cs_events[ev.time.time] = ev
+        # - cs -> [ctasks]
+        if cs != None:
+            cs.link_ctask(self)
+
+    def link_ntask(self, ev):
+        # - next_task    -> [events]
+        self.ntask_events[ev.time.time] = ev
+
     def __init__(self, tname, tid, pid):
         self.task_name = tname
         self.task_id = tid
         self.parent_id = pid
         self.color = hash_rgb_from_str( str(self) )
+
+        self.ctask_ty_events = collections.OrderedDict()
+        self.ctask_cs_events = collections.OrderedDict()
+        self.ntask_events = collections.OrderedDict()
 
     def __repr__(self):
         return "%s[%d/%d]" % (self.task_name, self.task_id, self.parent_id)
@@ -82,6 +110,9 @@ class ev_callstack:
     stackframe = ""
     color = (0.0, 0.0, 0.0)
 
+    # callstack to caller tasks
+    cs_ctasks = None
+
     @classmethod
     def get_instance(cls, cs):
         inst = cls.stackframe_dict.get(cs)
@@ -90,9 +121,13 @@ class ev_callstack:
             cls.stackframe_dict[cs] = inst
         return inst
 
+    def link_ctask(self, ctask):
+        self.cs_ctasks.add(ctask)
+
     def __init__(self, cs):
         self.stackframe = cs
         self.color = hash_rgb_from_str( str(self) )
+        self.cs_ctasks = set()
 
     def __repr__(self):
         return self.stackframe
@@ -112,9 +147,13 @@ class ev_sched:
     def __init__(self, time, period, cur_task, next_task, callstack):
         self.time = time
         self.period = period
+
         self.cur_task = cur_task
-        self.next_task = next_task
         self.callstack = callstack
+        self.cur_task.link_ctask(self, self.callstack)
+
+        self.next_task = next_task
+        self.next_task.link_ntask(self)
 
     def __repr__(self):
         return "\t".join(["S", str(self.time), str(self.cur_task), str(self.period), 
@@ -134,8 +173,12 @@ class ev_idle:
     def __init__(self, time, period, cur_task, next_task):
         self.time = time
         self.period = period
+
         self.cur_task = cur_task
+        self.cur_task.link_ctask(self)
+
         self.next_task = next_task
+        self.next_task.link_ntask(self)
 
     def __repr__(self):
         return "\t".join(["I", str(self.time), str(self.cur_task), str(self.period), 
@@ -154,9 +197,13 @@ class ev_mig:
 
     def __init__(self, time, cur_task, migrated_task, to_cpu_id):
         self.time = time
-        self.cur_task = cur_task
-        self.next_task = migrated_task
         self.to_cpu_id = to_cpu_id
+
+        self.cur_task = cur_task
+        self.cur_task.link_ctask(self)
+
+        self.next_task = migrated_task
+        self.next_task.link_ntask(self)
 
     def __repr__(self):
         return "\t".join(["M", str(self.time), str(self.cur_task), 
@@ -174,8 +221,12 @@ class ev_awake:
 
     def __init__(self, time, cur_task, awakened_task):
         self.time = time
+
         self.cur_task = cur_task
+        self.cur_task.link_ctask(self)
+
         self.next_task = awakened_task
+        self.next_task.link_ntask(self)
 
     def __repr__(self):
         return "\t".join(["A", str(self.time), str(self.cur_task), 
