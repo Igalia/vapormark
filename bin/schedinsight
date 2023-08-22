@@ -149,18 +149,18 @@ class ev_mig:
     # per-instanace variables
     time   = None
     cur_task  = None
-    migrated_task = None 
+    next_task = None 
     to_cpu_id = 0
 
     def __init__(self, time, cur_task, migrated_task, to_cpu_id):
         self.time = time
         self.cur_task = cur_task
-        self.migrated_task = migrated_task
+        self.next_task = migrated_task
         self.to_cpu_id = to_cpu_id
 
     def __repr__(self):
         return "\t".join(["M", str(self.time), str(self.cur_task), 
-                          "=>", str(self.migrated_task)])
+                          "=>", str(self.next_task)])
 
 class ev_awake:
     # per-class variables
@@ -170,12 +170,12 @@ class ev_awake:
     # per-instanace variables
     time   = None
     cur_task  = None
-    awakened_task = None 
+    next_task = None 
 
     def __init__(self, time, cur_task, awakened_task):
         self.time = time
         self.cur_task = cur_task
-        self.awakened_task = awakened_task
+        self.next_task = awakened_task
 
     def __repr__(self):
         return "\t".join(["A", str(self.time), str(self.cur_task), 
@@ -312,6 +312,65 @@ def filter_sched_events(events, filter_fn, filter_data):
 
     return filtered_events
 
+def reset_plot():
+    plt.clf()
+    plt.style.use('default')
+    plt.rcParams['font.size'] = 7
+
+def get_plot_name(args, plot_name, suffix):
+    log = os.path.join(args.outdir,
+                       args.log + "-schedinsight-" + plot_name + "." + suffix)
+    return log
+
+def plot_event_chart(args, plot_name, events):
+    ty_map = {}
+    ctask_map = {}
+    ntask_map = {}
+    cs_map = {}
+
+    # build data for plot
+    def append_color(m, c, i):
+        if m.get(c) == None:
+            m[c] = []
+        m[c].append(i)
+
+    for i, (time, ev) in enumerate(events.items()):
+        # - type
+        append_color(ty_map, ev.color, i)
+        append_color(ctask_map, ev.cur_task.color, i)
+        append_color(ntask_map, ev.next_task.color, i)
+        if ev.ty == ev_type.SCHED: 
+            append_color(cs_map, ev.callstack.color, i)
+        # TODO: not very useful if there are more than 1000 events
+
+    # plot events
+    # - prepare canvas
+    reset_plot()
+    fig, axs = plt.subplots(nrows=4, ncols=1, figsize=(7, 3.5))
+
+    # - plot type
+    def plot_map(ax, m, title):
+        ax.tick_params(left = False, right = False , labelleft = False , 
+                       labelbottom = False, bottom = False)
+        for c, x_data in m.items():
+            ax.bar(x_data, [1] * len(x_data), align='edge', width=1, color = c)
+        ax.set_ylim(bottom = 0, top = 1)
+        ax.set_ylabel(title)
+
+    plot_map(axs[0], ty_map, "event type")
+    plot_map(axs[1], ctask_map, "current task")
+    plot_map(axs[2], cs_map, "callstack")
+    plot_map(axs[3], ntask_map, "next task")
+
+    # - decoration
+    axs[0].tick_params(labeltop = True, top = True)
+    axs[3].tick_params(labelbottom = True, bottom = True)
+    plt.subplots_adjust(hspace = 0)
+
+    # - save to the file
+    fig_name = get_plot_name(args, plot_name, "svg")
+    plt.savefig(fig_name)
+
 
 def get_cmd_options(argv):
     parser = argparse.ArgumentParser(
@@ -329,7 +388,11 @@ def get_cmd_options(argv):
 if __name__ == "__main__":
     args = get_cmd_options(sys.argv[1:])
     events = load_schedmon_timehist(args)
+
+    """
+    plot_event_chart(args, "test", events)
     events = filter_sched_events(events, lambda e, d: e.ty == ev_type.IDLE, None)
     for time, ev in events.items():
         print(ev)
+    """
 
