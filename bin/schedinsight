@@ -8,6 +8,13 @@ import zlib
 import collections
 
 
+def hash_rgb_from_str(s):
+    h = zlib.crc32( bytes(s, 'utf-8') )
+    r = (h & 0x00FF00) >> 8
+    g = (h & 0xFF0000) >> 16
+    b = (h & 0x0000FF) >> 0
+    return (float(r)/0xFF, float(g)/0xFF, float(b)/0xFF)
+
 class ev_type:
     SCHED = 0
     IDLE  = 1
@@ -25,7 +32,6 @@ class ev_time:
     def __repr__(self):
         return "\t".join(["%.6f" % self.time, "[%d]" % self.cpu_id])
 
-
 class ev_task:
     # per-class variables
     task_dict = {} 
@@ -34,6 +40,7 @@ class ev_task:
     task_name = ""
     task_id   = 0
     parent_id = 0
+    color = (0.0, 0.0, 0.0)
 
     @classmethod
     def get_instance(cls, tname, tid, pid):
@@ -48,6 +55,7 @@ class ev_task:
         self.task_name = tname
         self.task_id = tid
         self.parent_id = pid
+        self.color = hash_rgb_from_str( str(self) )
 
     def __repr__(self):
         return "%s[%d/%d]" % (self.task_name, self.task_id, self.parent_id)
@@ -66,13 +74,13 @@ class ev_period:
         return "\t".join(["%.3f" % self.wait_time, 
                           "%.3f" % self.sch_delay,
                           "%.3f" % self.run_time])
-
 class ev_callstack:
     # per-class variables
     stackframe_dict= {} 
 
     # per-instanace variables
     stackframe = ""
+    color = (0.0, 0.0, 0.0)
 
     @classmethod
     def get_instance(cls, cs):
@@ -84,12 +92,17 @@ class ev_callstack:
 
     def __init__(self, cs):
         self.stackframe = cs
+        self.color = hash_rgb_from_str( str(self) )
 
     def __repr__(self):
         return self.stackframe
 
 class ev_sched:
+    # per-class variables
     ty = ev_type.SCHED
+    color =  hash_rgb_from_str( str(ev_type.SCHED) )
+
+    # per-instanace variables
     time   = None
     period = None
     cur_task  = None
@@ -108,22 +121,32 @@ class ev_sched:
                           "=>", str(self.next_task), str(self.callstack)])
 
 class ev_idle:
+    # per-class variables
     ty = ev_type.IDLE
+    color =  hash_rgb_from_str( str(ev_type.IDLE) )
+
+    # per-instanace variables
     time = None
     period = None
+    cur_task  = None
     next_task = None 
 
-    def __init__(self, time, period, next_task):
+    def __init__(self, time, period, cur_task, next_task):
         self.time = time
         self.period = period
+        self.cur_task = cur_task
         self.next_task = next_task
 
     def __repr__(self):
-        return "\t".join(["I", str(self.time), "<idle>", str(self.period), 
+        return "\t".join(["I", str(self.time), str(self.cur_task), str(self.period), 
                           "=>", str(self.next_task)])
 
 class ev_mig:
+    # per-class variables
     ty = ev_type.MIG
+    color =  hash_rgb_from_str( str(ev_type.MIG) )
+
+    # per-instanace variables
     time   = None
     cur_task  = None
     migrated_task = None 
@@ -140,7 +163,11 @@ class ev_mig:
                           "=>", str(self.migrated_task)])
 
 class ev_awake:
+    # per-class variables
     ty = ev_type.AWAKE
+    color =  hash_rgb_from_str( str(ev_type.AWAKE) )
+
+    # per-instanace variables
     time   = None
     cur_task  = None
     awakened_task = None 
@@ -209,9 +236,10 @@ def parse_ev_sched(toks, time):
     return ev_sched(time, period, cur_task, next_task, callstack)
 
 def parse_ev_idle(toks, time):
-    period, toks = parse_ev_period(toks[1:])  # toks[0] should be '<idle>'
+    cur_task, toks = parse_ev_task(toks)
+    period, toks = parse_ev_period(toks) 
     next_task, toks = parse_ev_task(toks[1:]) # toks[0] should be 'next:'
-    return ev_idle(time, period, next_task)
+    return ev_idle(time, period, cur_task, next_task)
 
 def parse_ev_mig(toks, time):
     cur_task, toks = parse_ev_task(toks)
