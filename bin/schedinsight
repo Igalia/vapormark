@@ -614,10 +614,10 @@ def analyze_task_idle_stat():
     task_stats.sort(reverse = True, key = lambda x: x[14])
     for i, s in enumerate(task_stats):
         s.append(i) # 17
-    # - score = rank_nsched**2 + rank_nmig**2 + rank_runtime**2
+    # - score
     for s in task_stats:
         ns, nm, rt = s[15], s[16], s[17]
-        score = ns*ns + nm*nm + rt*rt
+        score = ns*ns + (rt*rt)/2 + (nm*nm)/8
         s.append(score) #18
 
     # soft by score
