@@ -569,7 +569,7 @@ def plot_event_chart(args, plot_name, events):
     fig_name = get_plot_name(args, plot_name, "svg")
     plt.savefig(fig_name)
 
-def analyze_task_stat():
+def analyze_task_idle_stat():
     stat_names = ["task name", "num sched", "num mig" # 0--2
                   "wait time (median)", "wait time (avg)", "wait time (aad)", "wait time (total)", # 3--6
                   "sched delay (median)", "sched delay (avg)", "sched delay (aad)", "sched delay (total)", # 7-10
@@ -578,7 +578,8 @@ def analyze_task_stat():
                   ]
 
     # collect system-wide task stats
-    stat_list = []
+    task_stats = []
+    idle_stats = []
     for k, t in ev_task.task_dict.items():
         s = t.task_stat
 
@@ -588,31 +589,35 @@ def analyze_task_stat():
         r_stat = [s.sched_run_med, s.sched_run_avg, s.sched_run_aad, s.sched_run_sum]
 
         stat = t_info + w_stat + d_stat + r_stat
-        stat_list.append(stat)
+
+        if t.is_idle():
+            idle_stats.append(stat + [0, 0, 0, 0])
+        else:
+            task_stats.append(stat)
 
     # calc score
     # - by number of sched
-    stat_list.sort(reverse = True, key = lambda x: x[1])
-    for i, s in enumerate(stat_list):
+    task_stats.sort(reverse = True, key = lambda x: x[1])
+    for i, s in enumerate(task_stats):
         s.append(i) # 15
     # - by number of migration
-    stat_list.sort(reverse = True, key = lambda x: x[2])
-    for i, s in enumerate(stat_list):
+    task_stats.sort(reverse = True, key = lambda x: x[2])
+    for i, s in enumerate(task_stats):
         s.append(i) # 16
     # - by total runtime
-    stat_list.sort(reverse = True, key = lambda x: x[14])
-    for i, s in enumerate(stat_list):
+    task_stats.sort(reverse = True, key = lambda x: x[14])
+    for i, s in enumerate(task_stats):
         s.append(i) # 17
     # - score = rank_nsched**2 + rank_nmig**2 + rank_runtime**2
-    for i, s in enumerate(stat_list):
+    for i, s in enumerate(task_stats):
         ns, nm, rt = s[15], s[16], s[17]
         score = ns*ns + nm*nm + rt*rt
         s.append(score) #18
 
     # soft by score
-    stat_list.sort(key = lambda x: x[18])
+    task_stats.sort(key = lambda x: x[18])
 
-    return (stat_names, stat_list)
+    return (stat_names, task_stats, idle_stats)
 
 def gen_stat_in_csv(col_names, col_formats, tuples, f):
     def get_sep(c, ncol):
@@ -645,13 +650,17 @@ def get_outfile_name(args, kind, suffix):
                           "-schedinsight-" + kind + "." + suffix)
     return ofname
 
-def gen_task_stat(args):
-    stat_names, stat_list = analyze_task_stat()
+def gen_task_idle_stat(args):
+    stat_names, task_stats, idle_stats = analyze_task_idle_stat()
+    stat_formats = ["{0:^30}"] + ["{0:>10}"] * (len(stat_names) - 1)
 
     ofname = get_outfile_name(args, "task_stat", "csv")
-    stat_formats = ["{0:^30}"] + ["{0:>10}"] * (len(stat_names) - 1)
     with open(ofname, "w") as f:
-        gen_stat_in_csv(stat_names, stat_formats, stat_list, f)
+        gen_stat_in_csv(stat_names, stat_formats, task_stats, f)
+
+    ofname = get_outfile_name(args, "idle_stat", "csv")
+    with open(ofname, "w") as f:
+        gen_stat_in_csv(stat_names, stat_formats, idle_stats, f)
 
 def get_cmd_options(argv):
     parser = argparse.ArgumentParser(
@@ -669,7 +678,7 @@ def get_cmd_options(argv):
 if __name__ == "__main__":
     args = get_cmd_options(sys.argv[1:])
     events = load_schedmon_timehist(args)
-    gen_task_stat(args)
+    gen_task_idle_stat(args)
 
     """
     for cs in ev_callstack.stackframe_dict:
