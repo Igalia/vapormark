@@ -113,11 +113,11 @@ class task_stat:
     def analyze_stat(self):
         # ev_sched or ev_idle?
         if self.ev_task.is_idle() == True:
-            sched_events = self.ev_task.ctask_ty_events.get(ev_type.SCHED, [])
+            sched_events = self.ev_task.ctask_ty_events.get(ev_type.IDLE, collections.OrderedDict()) 
         else:
-            sched_events = self.ev_task.ctask_ty_events.get(ev_type.IDLE, [])
+            sched_events = self.ev_task.ctask_ty_events.get(ev_type.SCHED, collections.OrderedDict())
 
-        for e in sched_events:
+        for time, ev in sched_events.items():
             self.sched_waits.append(ev.period.wait_time)
             self.sched_delays.append(ev.period.sch_delay)
             self.sched_runs.append(ev.period.run_time)
@@ -202,7 +202,7 @@ class ev_task:
         ty_events = self.ctask_ty_events.get(ev.ty)
         if ty_events == None:
             ty_events = self.ctask_ty_events[ev.ty] = collections.OrderedDict()
-        self.ctask_ty_events[ev.time.time] = ev
+        ty_events[ev.time.time] = ev
         # - cur_task:cs -> [events]
         cs_events = self.ctask_cs_events.get(cs)
         if cs_events == None:
@@ -569,7 +569,7 @@ def plot_event_chart(args, plot_name, events):
     fig_name = get_plot_name(args, plot_name, "svg")
     plt.savefig(fig_name)
 
-def gen_task_stat(args):
+def analyze_task_stat():
     stat_names = ["task name", "num sched", "num mig" # 0--2
                   "wait time (median)", "wait time (avg)", "wait time (aad)", "wait time (total)", # 3--6
                   "sched delay (median)", "sched delay (avg)", "sched delay (aad)", "sched delay (total)", # 7-10
@@ -582,7 +582,7 @@ def gen_task_stat(args):
     for k, t in ev_task.task_dict.items():
         s = t.task_stat
 
-        t_info = [t.task_name, s.sched_num, s.migrated_num]
+        t_info = [str(t), s.sched_num, s.migrated_num]
         w_stat = [s.sched_wait_med, s.sched_wait_avg, s.sched_wait_aad, s.sched_wait_sum]
         d_stat = [s.sched_delay_med, s.sched_delay_avg, s.sched_delay_aad, s.sched_delay_sum]
         r_stat = [s.sched_run_med, s.sched_run_avg, s.sched_run_aad, s.sched_run_sum]
@@ -611,9 +611,8 @@ def gen_task_stat(args):
 
     # soft by score
     stat_list.sort(key = lambda x: x[18])
-    # FIXME: remove
-    for s in stat_list:
-        print(s)
+
+    return (stat_names, stat_list)
 
 def get_cmd_options(argv):
     parser = argparse.ArgumentParser(
@@ -631,7 +630,7 @@ def get_cmd_options(argv):
 if __name__ == "__main__":
     args = get_cmd_options(sys.argv[1:])
     events = load_schedmon_timehist(args)
-    gen_task_stat(args)
+    analyze_task_stat()
 
     """
     for cs in ev_callstack.stackframe_dict:
