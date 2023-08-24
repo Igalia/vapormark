@@ -6,7 +6,7 @@ import csv
 import matplotlib.pyplot as plt
 import zlib
 import collections
-
+import statistics
 
 def hash_rgb_from_str(s):
     h = zlib.crc32( bytes(s, 'utf-8') )
@@ -14,6 +14,25 @@ def hash_rgb_from_str(s):
     g = (h & 0xFF0000) >> 16
     b = (h & 0x0000FF) >> 0
     return (float(r)/0xFF, float(g)/0xFF, float(b)/0xFF)
+
+def median(l):
+    if len(l) == 0:
+        return 0.0
+    return statistics.median(l)
+
+def average(l):
+    if len(l) == 0:
+        return 0.0
+    return statistics.mean(l)
+
+def aad(l, avg):
+    # average absolute deviation: https://en.wikipedia.org/wiki/Average_absolute_deviation
+    if len(l) == 0:
+        return 0.0
+    sum = 0.0
+    for v in l:
+        sum = sum + abs(avg - v)
+    return sum / len(l)
 
 class ev_type:
     SCHED = 0
@@ -32,9 +51,103 @@ class ev_time:
     def __repr__(self):
         return "\t".join(["%.6f" % self.time, "[%d]" % self.cpu_id])
 
+class task_stat:
+    # task
+    ev_task = None
+
+    # ev_sched or ev_idle stat
+    sched_num = 0
+
+    sched_waits = None
+    sched_wait_med = 0.0
+    sched_wait_avg = 0.0
+    sched_wait_aad = 0.0
+    sched_wait_sum = 0.0
+
+    sched_delays = None
+    sched_delay_med = 0.0
+    sched_delay_avg = 0.0
+    sched_delay_aad = 0.0
+    sched_delay_sum = 0.0
+
+    sched_runs = None
+    sched_run_med = 0.0
+    sched_run_avg = 0.0
+    sched_run_aad = 0.0
+    sched_run_sum = 0.0
+    # TODO: sched_ideal_runs = []
+
+    # ev_mig stat
+    migrated_num = 0
+
+    # TODO: sched reason
+    # - iowait
+    # - lock_wait
+    # - preemption timeout
+    # - poll/epoll
+    # - pipe read
+
+    def __init__(self, ev_task):
+        self.ev_task = ev_task
+        self.sched_num = 0
+        self.sched_waits = []
+        self.sched_wait_med = 0.0
+        self.sched_wait_avg = 0.0
+        self.sched_wait_aad = 0.0
+        self.sched_wait_sum = 0.0
+
+        self.sched_delays = []
+        self.sched_delay_med = 0.0
+        self.sched_delay_avg = 0.0
+        self.sched_delay_aad = 0.0
+        self.sched_delay_sum = 0.0
+
+        self.sched_runs = []
+        self.sched_run_med = 0.0
+        self.sched_run_avg = 0.0
+        self.sched_run_aad = 0.0
+        self.sched_run_sum = 0.0
+
+        self.migrated_num = 0
+
+    def analyze_stat(self):
+        # ev_sched or ev_idle?
+        if self.ev_task.is_idle() == True:
+            sched_events = self.ev_task.ctask_ty_events.get(ev_type.SCHED, [])
+        else:
+            sched_events = self.ev_task.ctask_ty_events.get(ev_type.IDLE, [])
+
+        for e in sched_events:
+            self.sched_waits.append(ev.period.wait_time)
+            self.sched_delays.append(ev.period.sch_delay)
+            self.sched_runs.append(ev.period.run_time)
+
+        # ev_sched/ev_idle stat
+        self.sched_num = len(sched_events)
+
+        self.sched_wait_med = median(self.sched_waits)
+        self.sched_wait_avg = average(self.sched_waits)
+        self.sched_wait_aad = aad(self.sched_waits, self.sched_wait_avg)
+        self.sched_wait_sum = sum(self.sched_waits)
+
+        self.sched_delay_med = median(self.sched_delays)
+        self.sched_delay_avg = average(self.sched_delays)
+        self.sched_delay_aad = aad(self.sched_delays, self.sched_delay_avg)
+        self.sched_delay_sum = sum(self.sched_delays)
+
+        self.sched_run_med = median(self.sched_runs)
+        self.sched_run_avg = average(self.sched_runs)
+        self.sched_run_aad = aad(self.sched_runs, self.sched_run_avg)
+        self.sched_run_sum = sum(self.sched_runs)
+
+        # ev_mig stat
+        migrated_events = self.ev_task.ntask_ty_events.get(ev_type.MIG, [])
+        self.migrated_num = len(migrated_events)
+  
 class ev_task:
     # per-class variables
     task_dict = {} 
+    idle_task_name = "<idle>[0/0]"
 
     # per-instanace variables
     task_name = ""
@@ -43,9 +156,27 @@ class ev_task:
     color = (0.0, 0.0, 0.0)
 
     # task indexes to events
-    ctask_ty_events = None  # cur_task:ty -> [events]
-    ctask_cs_events = None  # cur_task:cs -> [events]
-    ntask_events = None     # next_task   -> [events]
+    ctask_ty_events = None  # cur_task:ty  -> [events]
+    ctask_cs_events = None  # cur_task:cs  -> [events]
+    ntask_ty_events = None  # next_task:ty -> [events]
+
+    # task stat
+    task_stat = None
+
+    def __init__(self, tname, tid, pid):
+        self.task_name = tname
+        self.task_id = tid
+        self.parent_id = pid
+        self.color = hash_rgb_from_str( str(self) )
+
+        self.ctask_ty_events = collections.OrderedDict()
+        self.ctask_cs_events = collections.OrderedDict()
+        self.ntask_ty_events = collections.OrderedDict()
+
+        self.task_stat = task_stat(self)
+
+    def __repr__(self):
+        return "%s[%d/%d]" % (self.task_name, self.task_id, self.parent_id)
 
     @classmethod
     def get_instance(cls, tname, tid, pid):
@@ -56,8 +187,18 @@ class ev_task:
             cls.task_dict[key] = inst
         return inst
 
+    @classmethod
+    def analyze_stat(cls):
+        for k, t in cls.task_dict.items():
+            t.task_stat.analyze_stat()
+
+    def is_idle(self):
+        if self.task_id == 0 and self.parent_id == 0 and self.task_name == "<idle>":
+            return True
+        return False
+
     def link_ctask(self, ev, cs = None):
-        # - cur_task    -> [events]
+        # - cur_task:ty -> [events]
         ty_events = self.ctask_ty_events.get(ev.ty)
         if ty_events == None:
             ty_events = self.ctask_ty_events[ev.ty] = collections.OrderedDict()
@@ -72,21 +213,11 @@ class ev_task:
             cs.link_ctask(self)
 
     def link_ntask(self, ev):
-        # - next_task    -> [events]
-        self.ntask_events[ev.time.time] = ev
-
-    def __init__(self, tname, tid, pid):
-        self.task_name = tname
-        self.task_id = tid
-        self.parent_id = pid
-        self.color = hash_rgb_from_str( str(self) )
-
-        self.ctask_ty_events = collections.OrderedDict()
-        self.ctask_cs_events = collections.OrderedDict()
-        self.ntask_events = collections.OrderedDict()
-
-    def __repr__(self):
-        return "%s[%d/%d]" % (self.task_name, self.task_id, self.parent_id)
+        # - next_task:ty -> [events]
+        ty_events = self.ntask_ty_events.get(ev.ty)
+        if ty_events == None:
+            ty_events = self.ntask_ty_events[ev.ty] = collections.OrderedDict()
+        self.ntask_ty_events[ev.time.time] = ev
 
 class ev_period:
     wait_time = 0.0
@@ -325,7 +456,7 @@ def get_log_name(args, kind):
                        args.log + "-schedmon-" + kind+ "__.log")
     return log
 
-def load_sched_events(f):
+def parse_sched_events(f):
     # - header
     skip_column_header(f)
 
@@ -338,7 +469,7 @@ def load_sched_events(f):
         events[ev.time.time] = ev
     return events
 
-def load_schedmon_timehist(args):
+def parse_schedmon_timehist(args):
     # get a log file name
     log = get_log_name(args, "timehist_full")
     if os.path.isfile(log) == False:
@@ -346,7 +477,7 @@ def load_schedmon_timehist(args):
 
     # parse the log
     with open(log, "r") as f:
-        sched_events = load_sched_events(f)
+        sched_events = parse_sched_events(f)
         # - TODO: Runtime summary
         # - TODO: Terminated tasks:
         # - TODO: Idle stats:
@@ -354,12 +485,27 @@ def load_schedmon_timehist(args):
 
     return sched_events
 
+def analyze_events():
+    ev_task.analyze_stat()
+
+def load_schedmon_timehist(args):
+    sched_events = parse_schedmon_timehist(args)
+    analyze_events()
+
+    return sched_events
+
+def rebuild_indexes(events):
+    # TODO
+    print("Sorry! Not implemented yet!")
+    pass
+
 def filter_sched_events(events, filter_fn, filter_data):
     filtered_events = collections.OrderedDict()
 
     for time, ev in events.items():
         if filter_fn(ev, filter_data) == True:
             filtered_events[time] = ev
+    rebuild_indexes(filtered_events)
 
     return filtered_events
 
@@ -393,6 +539,7 @@ def plot_event_chart(args, plot_name, events):
         if ev.ty == ev_type.SCHED: 
             append_color(cs_map, ev.callstack.color, i)
         # TODO: not very useful if there are more than 1000 events
+        # TODO: extend the inerface to time range
 
     # plot events
     # - prepare canvas
@@ -422,6 +569,51 @@ def plot_event_chart(args, plot_name, events):
     fig_name = get_plot_name(args, plot_name, "svg")
     plt.savefig(fig_name)
 
+def gen_task_stat(args):
+    stat_names = ["task name", "num sched", "num mig" # 0--2
+                  "wait time (median)", "wait time (avg)", "wait time (aad)", "wait time (total)", # 3--6
+                  "sched delay (median)", "sched delay (avg)", "sched delay (aad)", "sched delay (total)", # 7-10
+                  "runtime (median)", "runtime (avg)", "runtime (aad)", "runtime (total)", # 11-14
+                  "rank_nsched", "rank_nmig", "rank_runtime", "score", # 15-18
+                  ]
+
+    # collect system-wide task stats
+    stat_list = []
+    for k, t in ev_task.task_dict.items():
+        s = t.task_stat
+
+        t_info = [t.task_name, s.sched_num, s.migrated_num]
+        w_stat = [s.sched_wait_med, s.sched_wait_avg, s.sched_wait_aad, s.sched_wait_sum]
+        d_stat = [s.sched_delay_med, s.sched_delay_avg, s.sched_delay_aad, s.sched_delay_sum]
+        r_stat = [s.sched_run_med, s.sched_run_avg, s.sched_run_aad, s.sched_run_sum]
+
+        stat = t_info + w_stat + d_stat + r_stat
+        stat_list.append(stat)
+
+    # calc score
+    # - by number of sched
+    stat_list.sort(reverse = True, key = lambda x: x[1])
+    for i, s in enumerate(stat_list):
+        s.append(i) # 15
+    # - by number of migration
+    stat_list.sort(reverse = True, key = lambda x: x[2])
+    for i, s in enumerate(stat_list):
+        s.append(i) # 16
+    # - by total runtime
+    stat_list.sort(reverse = True, key = lambda x: x[14])
+    for i, s in enumerate(stat_list):
+        s.append(i) # 17
+    # - score = rank_nsched**2 + rank_nmig**2 + rank_runtime**2
+    for i, s in enumerate(stat_list):
+        ns, nm, rt = s[15], s[16], s[17]
+        score = ns*ns + nm*nm + rt*rt
+        s.append(score) #18
+
+    # soft by score
+    stat_list.sort(key = lambda x: x[18])
+    # FIXME: remove
+    for s in stat_list:
+        print(s)
 
 def get_cmd_options(argv):
     parser = argparse.ArgumentParser(
@@ -439,11 +631,41 @@ def get_cmd_options(argv):
 if __name__ == "__main__":
     args = get_cmd_options(sys.argv[1:])
     events = load_schedmon_timehist(args)
+    gen_task_stat(args)
 
     """
+    for cs in ev_callstack.stackframe_dict:
+        print(cs)
+
     plot_event_chart(args, "test", events)
     events = filter_sched_events(events, lambda e, d: e.ty == ev_type.IDLE, None)
     for time, ev in events.items():
         print(ev)
     """
+
+    '''
+    #### task stat
+    sched distibution: violin vs. histogram
+    runtime disribution: violon  vs. histogram
+    ideal runtime distribution: violin vs. histogram
+    wait time distribution
+    sched distribution
+    migration disribution
+
+        #### top tasks (percentail in sched, runtime, wait time)
+        sched distibution: violin vs. histogram
+        runtime disribution: violon  vs. histogram
+        ideal runtime distribution: violin vs. histogram
+        wait time distribution
+
+    #### waiter-waker analyis
+       2 distribution
+       3 distribution
+       or more
+
+    #### shced delay
+       scheduling in those ones
+
+    '''
+
 
