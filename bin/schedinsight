@@ -141,8 +141,9 @@ class task_stat:
         self.sched_run_sum = sum(self.sched_runs)
 
         # ev_mig stat
-        migrated_events = self.ev_task.ntask_ty_events.get(ev_type.MIG, [])
+        migrated_events = self.ev_task.ctask_ty_events.get(ev_type.MIG, collections.OrderedDict()) 
         self.migrated_num = len(migrated_events)
+
   
 class ev_task:
     # per-class variables
@@ -281,9 +282,9 @@ class ev_sched:
 
         self.cur_task = cur_task
         self.callstack = callstack
-        self.cur_task.link_ctask(self, self.callstack)
-
         self.next_task = next_task
+
+        self.cur_task.link_ctask(self, self.callstack)
         self.next_task.link_ntask(self)
 
     def __repr__(self):
@@ -306,9 +307,9 @@ class ev_idle:
         self.period = period
 
         self.cur_task = cur_task
-        self.cur_task.link_ctask(self)
-
         self.next_task = next_task
+
+        self.cur_task.link_ctask(self)
         self.next_task.link_ntask(self)
 
     def __repr__(self):
@@ -330,10 +331,10 @@ class ev_mig:
         self.time = time
         self.to_cpu_id = to_cpu_id
 
-        self.cur_task = cur_task
-        self.cur_task.link_ctask(self)
+        self.cur_task = migrated_task # migrated task should be the key
+        self.next_task = cur_task     # next task is indeed an initiator
 
-        self.next_task = migrated_task
+        self.cur_task.link_ctask(self)
         self.next_task.link_ntask(self)
 
     def __repr__(self):
@@ -353,10 +354,10 @@ class ev_awake:
     def __init__(self, time, cur_task, awakened_task):
         self.time = time
 
-        self.cur_task = cur_task
-        self.cur_task.link_ctask(self)
+        self.cur_task = awakened_task # awakened task should be the key
+        self.next_task = cur_task     # next task is indeed an initiator
 
-        self.next_task = awakened_task
+        self.cur_task.link_ctask(self)
         self.next_task.link_ntask(self)
 
     def __repr__(self):
@@ -497,7 +498,6 @@ def load_schedmon_timehist(args):
 def rebuild_indexes(events):
     # TODO
     print("Sorry! Not implemented yet!")
-    pass
 
 def filter_sched_events(events, filter_fn, filter_data):
     filtered_events = collections.OrderedDict()
@@ -571,9 +571,12 @@ def plot_event_chart(args, plot_name, events):
 
 def analyze_task_idle_stat():
     stat_names = ["task name", "num sched", "num mig", # 0--2
-                  "wait time (median)", "wait time (avg)", "wait time (aad)", "wait time (total)", # 3--6
-                  "sched delay (median)", "sched delay (avg)", "sched delay (aad)", "sched delay (total)", # 7-10
-                  "runtime (median)", "runtime (avg)", "runtime (aad)", "runtime (total)", # 11-14
+                  "wait time (median)", "wait time (avg)",
+                  "wait time (aad)", "wait time (total)", # 3--6
+                  "sched delay (median)", "sched delay (avg)",
+                  "sched delay (aad)", "sched delay (total)", # 7-10
+                  "runtime (median)", "runtime (avg)",
+                  "runtime (aad)", "runtime (total)", # 11-14
                   "rank_nsched", "rank_nmig", "rank_runtime", "score", # 15-18
                   ]
 
