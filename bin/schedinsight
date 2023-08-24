@@ -451,7 +451,7 @@ def skip_column_header(f):
     f.readline()
     f.readline()
 
-def get_log_name(args, kind):
+def get_schedmon_log_name(args, kind):
     log = os.path.join(args.outdir,
                        args.log + "-schedmon-" + kind+ "__.log")
     return log
@@ -471,9 +471,9 @@ def parse_sched_events(f):
 
 def parse_schedmon_timehist(args):
     # get a log file name
-    log = get_log_name(args, "timehist_full")
+    log = get_schedmon_log_name(args, "timehist_full")
     if os.path.isfile(log) == False:
-        log = get_log_name(args, "timehist_short")
+        log = get_schedmon_log_name(args, "timehist_short")
 
     # parse the log
     with open(log, "r") as f:
@@ -614,6 +614,45 @@ def analyze_task_stat():
 
     return (stat_names, stat_list)
 
+def gen_stat_in_csv(col_names, col_formats, tuples, f):
+    def get_sep(c, ncol):
+        if c == (ncol - 1):
+            return "\n"
+        else:
+            return ", "
+
+    def is_float(n):
+        try: 
+            return int(n) != float(n)
+        except ValueError:
+            return False
+
+    # column header
+    ncol = len(col_names)
+    for i, (fmt, cname) in enumerate(zip(col_formats, col_names)):
+        print(fmt.format(cname), end=get_sep(i, ncol), file = f)
+
+    # stat tuples 
+    for tup in tuples: 
+        for i, (fmt, cdata) in enumerate(zip(col_formats, tup)):
+            if is_float(cdata):
+                print(fmt.format("%.4f" % cdata), end=get_sep(i, ncol), file = f)
+            else:
+                print(fmt.format(cdata), end=get_sep(i, ncol), file = f)
+
+def get_outfile_name(args, kind, suffix):
+    ofname = os.path.join(args.outdir, args.log + 
+                          "-schedinsight-" + kind + "." + suffix)
+    return ofname
+
+def gen_task_stat(args):
+    stat_names, stat_list = analyze_task_stat()
+
+    ofname = get_outfile_name(args, "task_stat", "csv")
+    stat_formats = ["{0:^30}"] + ["{0:>10}"] * (len(stat_names) - 1)
+    with open(ofname, "w") as f:
+        gen_stat_in_csv(stat_names, stat_formats, stat_list, f)
+
 def get_cmd_options(argv):
     parser = argparse.ArgumentParser(
             prog = "schedinsight",
@@ -630,7 +669,7 @@ def get_cmd_options(argv):
 if __name__ == "__main__":
     args = get_cmd_options(sys.argv[1:])
     events = load_schedmon_timehist(args)
-    analyze_task_stat()
+    gen_task_stat(args)
 
     """
     for cs in ev_callstack.stackframe_dict:
