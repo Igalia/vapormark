@@ -570,7 +570,7 @@ def plot_event_chart(args, plot_name, events):
     plt.savefig(fig_name)
 
 def analyze_task_idle_stat():
-    stat_names = ["task name", "num sched", "num mig" # 0--2
+    stat_names = ["task name", "num sched", "num mig", # 0--2
                   "wait time (median)", "wait time (avg)", "wait time (aad)", "wait time (total)", # 3--6
                   "sched delay (median)", "sched delay (avg)", "sched delay (aad)", "sched delay (total)", # 7-10
                   "runtime (median)", "runtime (avg)", "runtime (aad)", "runtime (total)", # 11-14
@@ -582,6 +582,9 @@ def analyze_task_idle_stat():
     idle_stats = []
     for k, t in ev_task.task_dict.items():
         s = t.task_stat
+
+        if s.sched_num == 0 and s.migrated_num == 0:
+            continue
 
         t_info = [str(t), s.sched_num, s.migrated_num]
         w_stat = [s.sched_wait_med, s.sched_wait_avg, s.sched_wait_aad, s.sched_wait_sum]
@@ -609,7 +612,7 @@ def analyze_task_idle_stat():
     for i, s in enumerate(task_stats):
         s.append(i) # 17
     # - score = rank_nsched**2 + rank_nmig**2 + rank_runtime**2
-    for i, s in enumerate(task_stats):
+    for s in task_stats:
         ns, nm, rt = s[15], s[16], s[17]
         score = ns*ns + nm*nm + rt*rt
         s.append(score) #18
@@ -641,7 +644,7 @@ def gen_stat_in_csv(col_names, col_formats, tuples, f):
     for tup in tuples: 
         for i, (fmt, cdata) in enumerate(zip(col_formats, tup)):
             if is_float(cdata):
-                print(fmt.format("%.4f" % cdata), end=get_sep(i, ncol), file = f)
+                print(fmt.format("%.8f" % cdata), end=get_sep(i, ncol), file = f)
             else:
                 print(fmt.format(cdata), end=get_sep(i, ncol), file = f)
 
@@ -652,7 +655,7 @@ def get_outfile_name(args, kind, suffix):
 
 def gen_task_idle_stat(args):
     stat_names, task_stats, idle_stats = analyze_task_idle_stat()
-    stat_formats = ["{0:^30}"] + ["{0:>10}"] * (len(stat_names) - 1)
+    stat_formats = ["{0:^30}"] + ["{0:>14}"] * (len(stat_names) - 1)
 
     ofname = get_outfile_name(args, "task_stat", "csv")
     with open(ofname, "w") as f:
