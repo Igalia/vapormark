@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import zlib
 import collections
 import statistics
+import datetime
+import subprocess
 
 def hash_rgb_from_str(s):
     h = zlib.crc32( bytes(s, 'utf-8') )
@@ -686,7 +688,7 @@ def plot_dist_fig(args, plot_name, sorted_values, title, x_label, y_label, min_m
     # 3) histogram plot
     # - plot
     ax = axs[2]
-    ax.hist(sorted_values, bins = 20)
+    ax.hist(sorted_values, bins = 30)
     # - decoration
     if min_max[0] != min_max[1]:
         ax.set_ylim(bottom = min_max[0], top = min_max[1])
@@ -704,6 +706,67 @@ def plot_task_dist_figs(args, stat_names, task_stats):
     stat_cols = transpose_2d_list(task_stats)
     for name, stat in zip(stat_names[1:-4], stat_cols[1:-4]):
         plot_dist_fig(args, "task_dist_" + name, sorted(stat), name, "", "", (0, 0))
+
+def get_res_path(args, fname):
+    afil = os.path.join(args.outdir, fname)
+    rfil = os.path.relpath(afil, start = args.outdir)
+    return afil, rfil
+
+def gen_md_title(title, f):
+    print("``` {=html}", file = f)
+    print("<style>", file = f)
+    print("body { min-width: 80% !important; }", file = f)
+    print("</style>", file = f)
+    print("```", file = f)
+
+    print("---", file = f)
+    print("title: %s" % title, file = f)
+    print("date: %s" % datetime.datetime.now(), file = f)
+    print("---", file = f)
+    print("\n\n", file = f)
+
+def gen_md_tbl_figs(args, col_names, fea, header, f):
+    # generate header row
+    if header:
+        l1, l2 = "|", "|"
+        for col_name in col_names:
+            l1 = l1 + " **" + col_name + "** | "
+            l2 = l2 + " ---: | "
+        print(l1, file = f)
+        print(l2, file = f)
+
+    # figures
+    l = "|"
+    for col_name in col_names:
+        fig_name = get_outfile_name(args, fea + col_name, "svg")
+        afil, rfil = get_res_path(args, fig_name)
+        img = "![](" + rfil + ")"
+        l = l + " " + img + " | "
+    print(l, file = f)
+    print("\n\n", file = f)
+
+def gen_task_idle_stat_report(args, results):
+    # generate a report in markdow
+    md_fname = get_outfile_name(args, "report", "md")
+    with open(md_fname, "w") as f:
+        # configs
+        gen_md_title("Task and idle status of %s" % args.log, f)
+
+        # links to raw data
+        print("- [task stats data](%s)" % 
+              get_outfile_name(args, "task_stat", "csv"), file = f)
+        print("- [idle stats data](%s)" % 
+              get_outfile_name(args, "idle_stat", "csv"), file = f)
+        print("\n\n", file = f)
+
+        # figs table
+        gen_md_tbl_figs(args, results.task_stat_names[1:-4], "task_dist_", True, f)
+
+    # convert the markdown to html
+    html_fname = get_outfile_name(args, "report", "html")
+    cmd = "pandoc --standalone --toc %s -o %s" % (md_fname, html_fname)
+    p = subprocess.Popen(cmd, shell=True, stdout=None, stderr=None)
+    p.wait()
 
 def gen_task_idle_stat(args, results):
     stat_names = results.task_stat_names
@@ -724,6 +787,7 @@ def gen_task_idle_stat(args, results):
     plot_task_dist_figs(args, stat_names, task_stats)
 
     # generate markdown
+    gen_task_idle_stat_report(args, results)
 
 def analyze_events(args, events):
     r = analysis_results()
