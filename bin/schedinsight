@@ -509,74 +509,14 @@ def filter_sched_events(events, filter_fn, filter_data):
 
     return filtered_events
 
-def reset_plot():
-    plt.clf()
-    plt.style.use('default')
-    plt.rcParams['font.size'] = 7
-
-def get_plot_name(args, plot_name, suffix):
-    log = os.path.join(args.outdir,
-                       args.log + "-schedinsight-" + plot_name + "." + suffix)
-    return log
-
-def plot_event_chart(args, plot_name, events):
-    ty_map = {}
-    ctask_map = {}
-    ntask_map = {}
-    cs_map = {}
-
-    # build data for plot
-    def append_color(m, c, i):
-        if m.get(c) == None:
-            m[c] = []
-        m[c].append(i)
-
-    for i, (time, ev) in enumerate(events.items()):
-        # - type
-        append_color(ty_map, ev.color, i)
-        append_color(ctask_map, ev.cur_task.color, i)
-        append_color(ntask_map, ev.next_task.color, i)
-        if ev.ty == ev_type.SCHED: 
-            append_color(cs_map, ev.callstack.color, i)
-        # TODO: not very useful if there are more than 1000 events
-        # TODO: extend the inerface to time range
-
-    # plot events
-    # - prepare canvas
-    reset_plot()
-    fig, axs = plt.subplots(nrows=4, ncols=1, figsize=(7, 3.5))
-
-    # - plot type
-    def plot_map(ax, m, title):
-        ax.tick_params(left = False, right = False , labelleft = False , 
-                       labelbottom = False, bottom = False)
-        for c, x_data in m.items():
-            ax.bar(x_data, [1] * len(x_data), align='edge', width=1, color = c)
-        ax.set_ylim(bottom = 0, top = 1)
-        ax.set_ylabel(title)
-
-    plot_map(axs[0], ty_map, "event type")
-    plot_map(axs[1], ctask_map, "current task")
-    plot_map(axs[2], cs_map, "callstack")
-    plot_map(axs[3], ntask_map, "next task")
-
-    # - decoration
-    axs[0].tick_params(labeltop = True, top = True)
-    axs[3].tick_params(labelbottom = True, bottom = True)
-    plt.subplots_adjust(hspace = 0)
-
-    # - save to the file
-    fig_name = get_plot_name(args, plot_name, "svg")
-    plt.savefig(fig_name)
-
 def analyze_task_idle_stat():
-    stat_names = ["task name", "num sched", "num mig", # 0--2
-                  "wait time (median)", "wait time (avg)",
-                  "wait time (aad)", "wait time (total)", # 3--6
-                  "sched delay (median)", "sched delay (avg)",
-                  "sched delay (aad)", "sched delay (total)", # 7-10
-                  "runtime (median)", "runtime (avg)",
-                  "runtime (aad)", "runtime (total)", # 11-14
+    stat_names = ["task_name", "num_sched", "num_mig", # 0--2
+                  "wait_time_med", "wait_time_avg",
+                  "wait_time_aad", "wait_time_total", # 3--6
+                  "sched_delay_median", "sched_delay_avg",
+                  "sched_delay_aad", "sched_delay_total", # 7-10
+                  "runtime_med", "runtime_avg",
+                  "runtime_aad", "runtime_total", # 11-14
                   "rank_nsched", "rank_nmig", "rank_runtime", "score", # 15-18
                   ]
 
@@ -625,6 +565,66 @@ def analyze_task_idle_stat():
 
     return (stat_names, task_stats, idle_stats)
 
+def get_outfile_name(args, kind, suffix):
+    ofname = os.path.join(args.outdir, args.log + 
+                          "-schedinsight-" + kind + "." + suffix)
+    return ofname
+
+def reset_plot():
+    plt.clf()
+    plt.style.use('default')
+    plt.rcParams['font.size'] = 7
+
+def plot_event_chart(args, plot_name, events):
+    ty_map = {}
+    ctask_map = {}
+    ntask_map = {}
+    cs_map = {}
+
+    # build data for plot
+    def append_color(m, c, i):
+        if m.get(c) == None:
+            m[c] = []
+        m[c].append(i)
+
+    for i, (time, ev) in enumerate(events.items()):
+        # - type
+        append_color(ty_map, ev.color, i)
+        append_color(ctask_map, ev.cur_task.color, i)
+        append_color(ntask_map, ev.next_task.color, i)
+        if ev.ty == ev_type.SCHED: 
+            append_color(cs_map, ev.callstack.color, i)
+        # TODO: not very useful if there are more than 1000 events
+        # TODO: extend the inerface to time range
+
+    # plot events
+    # - prepare canvas
+    reset_plot()
+    fig, axs = plt.subplots(nrows=4, ncols=1, figsize=(7, 3.5), tight_layout=True)
+
+    # - plot type
+    def plot_map(ax, m, title):
+        ax.tick_params(left = False, right = False , labelleft = False , 
+                       labelbottom = False, bottom = False)
+        for c, x_data in m.items():
+            ax.bar(x_data, [1] * len(x_data), align='edge', width=1, color = c)
+        ax.set_ylim(bottom = 0, top = 1)
+        ax.set_ylabel(title)
+
+    plot_map(axs[0], ty_map, "event type")
+    plot_map(axs[1], ctask_map, "current task")
+    plot_map(axs[2], cs_map, "callstack")
+    plot_map(axs[3], ntask_map, "next task")
+
+    # - decoration
+    axs[0].tick_params(labeltop = True, top = True)
+    axs[3].tick_params(labelbottom = True, bottom = True)
+    plt.subplots_adjust(hspace = 0)
+
+    # - save to the file
+    fig_name = get_outfile_name(args, plot_name, "svg")
+    plt.savefig(fig_name)
+
 def gen_stat_in_csv(col_names, col_formats, tuples, f):
     def get_sep(c, ncol):
         if c == (ncol - 1):
@@ -651,10 +651,56 @@ def gen_stat_in_csv(col_names, col_formats, tuples, f):
             else:
                 print(fmt.format(cdata), end=get_sep(i, ncol), file = f)
 
-def get_outfile_name(args, kind, suffix):
-    ofname = os.path.join(args.outdir, args.log + 
-                          "-schedinsight-" + kind + "." + suffix)
-    return ofname
+def plot_dist_fig(args, plot_name, sorted_values, title, x_label, y_label, min_max):
+    # prepare canvas
+    reset_plot()
+    fig, axs = plt.subplots(nrows=3, ncols=1, figsize=(3, 8), tight_layout=True)
+
+    # 1) violin plot
+    # - plot
+    ax = axs[0]
+    violin = ax.violinplot([sorted_values], showmeans=True,  quantiles=[0.1, 0.5, 0.9])
+    violin['bodies'][0].set_facecolor( hash_rgb_from_str(y_label) )
+    violin['cmeans'].set_edgecolor('red')
+    # - set title
+    ax.set_title(title)
+    # - decoration
+    if min_max[0] != min_max[1]:
+        ax.set_ylim(bottom = min_max[0], top = min_max[1])
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+
+    # 2) distribution line plot
+    # - plot
+    ax = axs[1]
+    ax.plot(range(len(sorted_values)), sorted_values, linewidth=1, color='black')
+    # - decoration
+    if min_max[0] != min_max[1]:
+        ax.set_ylim(bottom = min_max[0], top = min_max[1])
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+
+    # 3) histogram plot
+    # - plot
+    ax = axs[2]
+    ax.hist(sorted_values, bins = 20)
+    # - decoration
+    if min_max[0] != min_max[1]:
+        ax.set_ylim(bottom = min_max[0], top = min_max[1])
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+
+    # - save to the file
+    fig_name = get_outfile_name(args, plot_name, "svg")
+    plt.savefig(fig_name)
+
+def transpose_2d_list(ll):
+    return list(zip(*ll))
+
+def plot_task_dist_figs(args, stat_names, task_stats):
+    stat_cols = transpose_2d_list(task_stats)
+    for name, stat in zip(stat_names[1:-4], stat_cols[1:-4]):
+        plot_dist_fig(args, "task_dist_" + name, sorted(stat), name, "", "", (0, 0))
 
 def gen_task_idle_stat(args):
     stat_names, task_stats, idle_stats = analyze_task_idle_stat()
@@ -663,6 +709,7 @@ def gen_task_idle_stat(args):
     ofname = get_outfile_name(args, "task_stat", "csv")
     with open(ofname, "w") as f:
         gen_stat_in_csv(stat_names, stat_formats, task_stats, f)
+    plot_task_dist_figs(args, stat_names, task_stats)
 
     ofname = get_outfile_name(args, "idle_stat", "csv")
     with open(ofname, "w") as f:
