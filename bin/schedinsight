@@ -364,6 +364,19 @@ class ev_awake:
         return "\t".join(["A", str(self.time), str(self.cur_task), 
                           "=>", str(self.awakened_task)])
 
+class analysis_results:
+    # task & idle status
+    task_stat_names = None
+    task_stats = None
+    idle_stats = None
+    task_stat_formats = None
+
+    def __init__(self):
+        task_stat_names = []
+        task_stats = []
+        idle_stats = []
+        task_stat_formats = []
+
 def parse_ev_time(toks):
     time = float(toks[0])
     cpu_id = int(toks[1][1:-1])
@@ -486,18 +499,8 @@ def parse_schedmon_timehist(args):
 
     return sched_events
 
-def analyze_events():
-    ev_task.analyze_stat()
-
 def load_schedmon_timehist(args):
-    sched_events = parse_schedmon_timehist(args)
-    analyze_events()
-
-    return sched_events
-
-def rebuild_indexes(events):
-    # TODO
-    print("Sorry! Not implemented yet!")
+    return parse_schedmon_timehist(args)
 
 def filter_sched_events(events, filter_fn, filter_data):
     filtered_events = collections.OrderedDict()
@@ -702,18 +705,37 @@ def plot_task_dist_figs(args, stat_names, task_stats):
     for name, stat in zip(stat_names[1:-4], stat_cols[1:-4]):
         plot_dist_fig(args, "task_dist_" + name, sorted(stat), name, "", "", (0, 0))
 
-def gen_task_idle_stat(args):
-    stat_names, task_stats, idle_stats = analyze_task_idle_stat()
-    stat_formats = ["{0:^30}"] + ["{0:>14}"] * (len(stat_names) - 1)
+def gen_task_idle_stat(args, results):
+    stat_names = results.task_stat_names
+    task_stats = results.task_stats
+    idle_stats = results.idle_stats
+    stat_formats = results.task_stat_formats
 
+    # generate CSV data
     ofname = get_outfile_name(args, "task_stat", "csv")
     with open(ofname, "w") as f:
         gen_stat_in_csv(stat_names, stat_formats, task_stats, f)
-    plot_task_dist_figs(args, stat_names, task_stats)
 
     ofname = get_outfile_name(args, "idle_stat", "csv")
     with open(ofname, "w") as f:
         gen_stat_in_csv(stat_names, stat_formats, idle_stats, f)
+
+    # generate distribution graphs 
+    plot_task_dist_figs(args, stat_names, task_stats)
+
+    # generate markdown
+
+def analyze_events(args, events):
+    r = analysis_results()
+
+    # build per-task stats 
+    ev_task.analyze_stat()
+
+    # analysis task & idle status
+    r. task_stat_names, r.task_stats, r.idle_stats = analyze_task_idle_stat()
+    r.task_stat_formats = ["{0:^30}"] + ["{0:>14}"] * (len(r.task_stat_names) - 1)
+
+    return r
 
 def get_cmd_options(argv):
     parser = argparse.ArgumentParser(
@@ -730,8 +752,10 @@ def get_cmd_options(argv):
 
 if __name__ == "__main__":
     args = get_cmd_options(sys.argv[1:])
+
     events = load_schedmon_timehist(args)
-    gen_task_idle_stat(args)
+    results = analyze_events(args, events)
+    gen_task_idle_stat(args, results)
 
     """
     for cs in ev_callstack.stackframe_dict:
