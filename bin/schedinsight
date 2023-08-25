@@ -9,6 +9,7 @@ import collections
 import statistics
 import datetime
 import subprocess
+import numpy as np
 
 def hash_rgb_from_str(s):
     h = zlib.crc32( bytes(s, 'utf-8') )
@@ -366,6 +367,20 @@ class ev_awake:
         return "\t".join(["A", str(self.time), str(self.cur_task), 
                           "=>", str(self.awakened_task)])
 
+class pearson_corr:
+    x_label = ""
+    y_label = ""
+    x_data  = None
+    y_data  = None
+    pcc     = None
+
+    def __init__(self, x, y):
+        self.x_label = x
+        self.y_label = y
+        self.x_data  = None
+        self.y_data  = None
+        self.pcc     = None
+
 class analysis_results:
     # task & idle status
     task_stat_names = None
@@ -373,11 +388,15 @@ class analysis_results:
     idle_stats = None
     task_stat_formats = None
 
+    # pearson correlations
+    corrs = None
+
     def __init__(self):
         task_stat_names = []
         task_stats = []
         idle_stats = []
         task_stat_formats = []
+        corrs = []
 
 def parse_ev_time(toks):
     time = float(toks[0])
@@ -518,7 +537,7 @@ def analyze_task_idle_stat():
     stat_names = ["task_name", "num_sched", "num_mig", # 0--2
                   "wait_time_med", "wait_time_avg",
                   "wait_time_aad", "wait_time_total", # 3--6
-                  "sched_delay_median", "sched_delay_avg",
+                  "sched_delay_med", "sched_delay_avg",
                   "sched_delay_aad", "sched_delay_total", # 7-10
                   "runtime_med", "runtime_avg",
                   "runtime_aad", "runtime_total", # 11-14
@@ -656,7 +675,7 @@ def gen_stat_in_csv(col_names, col_formats, tuples, f):
             else:
                 print(fmt.format(cdata), end=get_sep(i, ncol), file = f)
 
-def plot_dist_fig(args, plot_name, sorted_values, title, x_label, y_label, min_max):
+def plot_dist_fig(args, plot_name, sorted_values, title, x_label, y_label):
     # prepare canvas
     reset_plot()
     fig, axs = plt.subplots(nrows=3, ncols=1, figsize=(3, 8), tight_layout=True)
@@ -670,8 +689,6 @@ def plot_dist_fig(args, plot_name, sorted_values, title, x_label, y_label, min_m
     # - set title
     ax.set_title(title)
     # - decoration
-    if min_max[0] != min_max[1]:
-        ax.set_ylim(bottom = min_max[0], top = min_max[1])
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
 
@@ -680,8 +697,6 @@ def plot_dist_fig(args, plot_name, sorted_values, title, x_label, y_label, min_m
     ax = axs[1]
     ax.plot(range(len(sorted_values)), sorted_values, linewidth=1, color='black')
     # - decoration
-    if min_max[0] != min_max[1]:
-        ax.set_ylim(bottom = min_max[0], top = min_max[1])
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
 
@@ -690,10 +705,27 @@ def plot_dist_fig(args, plot_name, sorted_values, title, x_label, y_label, min_m
     ax = axs[2]
     ax.hist(sorted_values, bins = 30)
     # - decoration
-    if min_max[0] != min_max[1]:
-        ax.set_ylim(bottom = min_max[0], top = min_max[1])
+    max_hist = len(sorted_values)/3
+    ax.set_ylim(bottom = 0, top = max_hist)
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
+
+    # - save to the file
+    fig_name = get_outfile_name(args, plot_name, "svg")
+    plt.savefig(fig_name)
+
+def plot_corr_figs(args, corrs, plot_name):
+    # prepare canvas
+    reset_plot()
+    fig, axs = plt.subplots(nrows=1, ncols=len(corrs), 
+                            figsize=(3*len(corrs), 3), tight_layout=True)
+
+    # scatter plot
+    for i, corr in enumerate(corrs):
+        ax = axs[i]
+        ax.scatter(corr.x_data, corr.y_data)
+        ax.set(xlabel=corr.x_label, ylabel=corr.y_label)
+        ax.title.set_text("Correlation = " + "{:.2f}".format(corr.pcc[0,1]))
 
     # - save to the file
     fig_name = get_outfile_name(args, plot_name, "svg")
@@ -705,7 +737,7 @@ def transpose_2d_list(ll):
 def plot_task_dist_figs(args, stat_names, task_stats):
     stat_cols = transpose_2d_list(task_stats)
     for name, stat in zip(stat_names[1:-4], stat_cols[1:-4]):
-        plot_dist_fig(args, "task_dist_" + name, sorted(stat), name, "", "", (0, 0))
+        plot_dist_fig(args, "task_dist_" + name, sorted(stat), name, "", "")
 
 def get_res_path(args, fname):
     afil = os.path.join(args.outdir, fname)
@@ -789,6 +821,27 @@ def gen_task_idle_stat(args, results):
     # generate markdown
     gen_task_idle_stat_report(args, results)
 
+def get_stat(key, stat_names, stat_cols):
+    for stat_name, stat in zip(stat_names, stat_cols):
+        if stat_name == key:
+            return stat
+    return None
+
+def analyze_stats_correlation(args, results):
+    # list of stat-pairs
+    results.corrs = [pearson_corr("num_sched", "num_mig"),
+                     pearson_corr("num_sched", "runtime_med"),
+                     pearson_corr("sched_delay_med", "num_sched"),
+                     pearson_corr("sched_delay_med", "runtime_med"),
+                     pearson_corr("sched_delay_med", "runtime_total")]
+
+    # calc pearson correlations
+    stat_cols = transpose_2d_list(results.task_stats)
+    for corr in results.corrs:
+        corr.x_data = get_stat(corr.x_label, results.task_stat_names, stat_cols)
+        corr.y_data = get_stat(corr.y_label, results.task_stat_names, stat_cols)
+        corr.pcc = np.corrcoef(np.array(corr.x_data), np.array(corr.y_data))
+
 def analyze_events(args, events):
     r = analysis_results()
 
@@ -796,8 +849,11 @@ def analyze_events(args, events):
     ev_task.analyze_stat()
 
     # analysis task & idle status
-    r. task_stat_names, r.task_stats, r.idle_stats = analyze_task_idle_stat()
+    r.task_stat_names, r.task_stats, r.idle_stats = analyze_task_idle_stat()
     r.task_stat_formats = ["{0:^30}"] + ["{0:>14}"] * (len(r.task_stat_names) - 1)
+
+    # correlation analysis
+    analyze_stats_correlation(args, r)
 
     return r
 
@@ -820,6 +876,7 @@ if __name__ == "__main__":
     events = load_schedmon_timehist(args)
     results = analyze_events(args, events)
     gen_task_idle_stat(args, results)
+    plot_corr_figs(args, results.corrs, "task_stat_corr")
 
     """
     for cs in ev_callstack.stackframe_dict:
