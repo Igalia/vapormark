@@ -831,9 +831,18 @@ def analyze_stats_correlation(args, results):
     # list of stat-pairs
     results.corrs = [pearson_corr("num_sched", "num_mig"),
                      pearson_corr("num_sched", "runtime_med"),
+                     pearson_corr("num_sched", "runtime_avg"),
+                     pearson_corr("runtime_avg", "runtime_aad"),
+                     pearson_corr("runtime_med", "runtime_aad"),
+                     pearson_corr("runtime_total", "runtime_avg"),
+                     pearson_corr("runtime_total", "runtime_med"),
                      pearson_corr("sched_delay_med", "num_sched"),
+                     pearson_corr("sched_delay_avg", "num_sched"),
                      pearson_corr("sched_delay_med", "runtime_med"),
-                     pearson_corr("sched_delay_med", "runtime_total")]
+                     pearson_corr("sched_delay_avg", "runtime_med"),
+                     pearson_corr("sched_delay_med", "runtime_total"),
+                     pearson_corr("sched_delay_avg", "runtime_total"),
+                     ]
 
     # calc pearson correlations
     stat_cols = transpose_2d_list(results.task_stats)
