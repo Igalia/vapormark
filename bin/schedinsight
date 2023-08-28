@@ -521,6 +521,8 @@ def is_newer(file_new, file_old):
     return os.path.getmtime(file_new) > os.path.getmtime(file_old)
 
 def load_pickle(args, log_fil):
+    return None # FIXME: temporarly disable due to the OOM error
+
     pickle_fil = get_outfile_name(args, "pickled_jar__", "pickle")
     if is_newer(pickle_fil, log_fil):
         with open(pickle_fil, mode="rb") as pf:
