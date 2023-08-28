@@ -844,30 +844,23 @@ def gen_md_tbl_figs(args, col_names, fea, header, f):
     print(l, file = f)
     print("\n\n", file = f)
 
-def gen_task_idle_stat_report(args, results):
-    # generate a report in markdow
-    md_fname = get_outfile_name(args, "report", "md")
-    with open(md_fname, "w") as f:
-        # configs
-        gen_md_title("Task and idle status of %s" % args.log, f)
+def gen_task_idle_stat_report(args, results, md_f):
+    # configs
+    gen_md_title("%s" % args.log, md_f)
 
-        # links to raw data
-        print("- [task stats data](%s)" % 
-              get_outfile_name(args, "task_stat", "csv"), file = f)
-        print("- [idle stats data](%s)" % 
-              get_outfile_name(args, "idle_stat", "csv"), file = f)
-        print("\n\n", file = f)
+    print("### Task statistics\n\n", file = md_f)
 
-        # figs table
-        gen_md_tbl_figs(args, results.task_stat_names[1:-4], "task_dist_", True, f)
+    # links to raw data
+    print("- [task stats data](%s)" % 
+          get_outfile_name(args, "task_stat", "csv"), file = md_f)
+    print("- [idle stats data](%s)" % 
+          get_outfile_name(args, "idle_stat", "csv"), file = md_f)
+    print("\n\n", file = md_f)
 
-    # convert the markdown to html
-    html_fname = get_outfile_name(args, "report", "html")
-    cmd = "pandoc --standalone --toc %s -o %s" % (md_fname, html_fname)
-    p = subprocess.Popen(cmd, shell=True, stdout=None, stderr=None)
-    p.wait()
+    # figs table
+    gen_md_tbl_figs(args, results.task_stat_names[1:-4], "task_dist_", True, md_f)
 
-def gen_task_idle_stat(args, results):
+def gen_task_idle_stat(args, results, md_f):
     stat_names = results.task_stat_names
     task_stats = results.task_stats
     idle_stats = results.idle_stats
@@ -886,7 +879,18 @@ def gen_task_idle_stat(args, results):
     plot_task_dist_figs(args, stat_names, task_stats)
 
     # generate markdown
-    gen_task_idle_stat_report(args, results)
+    gen_task_idle_stat_report(args, results, md_f)
+
+def gen_task_stat_corr(args, results, md_f):
+    # generate correlation graphs
+    plot_corr_figs(args, results.corrs, "task_stat_corr")
+
+    # generate markdown
+    print("### Pearson correlation between task features\n\n", file = md_f)
+    fig_name = get_outfile_name(args, "task_stat_corr", "svg")
+    afil, rfil = get_res_path(args, fig_name)
+    print("![](" + rfil + ")", file = md_f)
+    print("\n\n", file = md_f)
 
 def get_stat(key, stat_names, stat_cols):
     for stat_name, stat in zip(stat_names, stat_cols):
@@ -897,19 +901,15 @@ def get_stat(key, stat_names, stat_cols):
 def analyze_stats_correlation(args, results):
     # list of stat-pairs
     results.corrs = [pearson_corr("num_sched", "num_mig", "task_name"),
+                     pearson_corr("runtime_avg", "runtime_aad", "task_name"), 
+                     pearson_corr("num_sched", "sched_delay_avg", "task_name"),
+                     pearson_corr("runtime_avg", "sched_delay_avg", "task_name"),
+                     pearson_corr("runtime_total", "sched_delay_avg", "task_name"),]
                      # pearson_corr("num_sched", "runtime_med", "task_name"),
                      # pearson_corr("num_sched", "runtime_avg", "task_name"),
-                     pearson_corr("runtime_avg", "runtime_aad", "task_name"),
                      # pearson_corr("runtime_med", "runtime_aad", "task_name"),
                      # pearson_corr("runtime_total", "runtime_avg", "task_name"),
                      # pearson_corr("runtime_total", "runtime_med", "task_name"),
-                     # pearson_corr("sched_delay_med", "num_sched", "task_name"),
-                     # pearson_corr("sched_delay_avg", "num_sched", "task_name"),
-                     # pearson_corr("sched_delay_med", "runtime_med", "task_name"),
-                     # pearson_corr("sched_delay_avg", "runtime_med", "task_name"),
-                     # pearson_corr("sched_delay_med", "runtime_total", "task_name"),
-                     # pearson_corr("sched_delay_avg", "runtime_total", "task_name"),
-                     ]
 
     # calc pearson correlations
     stat_cols = transpose_2d_list(results.task_stats)
@@ -952,13 +952,27 @@ def get_cmd_options(argv):
     return args
 
 if __name__ == "__main__":
+    # extend recursion limit for huge logs
     sys.setrecursionlimit(100000)
+
+    # get options
     args = get_cmd_options(sys.argv[1:])
 
+    # load and analyze the log
     events = load_schedmon_timehist(args)
     results = analyze_events(args, events)
-    gen_task_idle_stat(args, results)
-    plot_corr_figs(args, results.corrs, "task_stat_corr")
+
+    # generate a report in markdow
+    md_fname = get_outfile_name(args, "report", "md")
+    with open(md_fname, "w") as md_f:
+        gen_task_idle_stat(args, results, md_f)
+        gen_task_stat_corr(args, results, md_f)
+
+    # convert the markdown to html
+    html_fname = get_outfile_name(args, "report", "html")
+    cmd = "pandoc --standalone --toc %s -o %s" % (md_fname, html_fname)
+    p = subprocess.Popen(cmd, shell=True, stdout=None, stderr=None)
+    p.wait()
 
     """
     for cs in ev_callstack.stackframe_dict:
