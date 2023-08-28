@@ -521,7 +521,8 @@ def is_newer(file_new, file_old):
     return os.path.getmtime(file_new) > os.path.getmtime(file_old)
 
 def load_pickle(args, log_fil):
-    return None # FIXME: temporarly disable due to the OOM error
+    if args.pickle == False:
+        return None
 
     pickle_fil = get_outfile_name(args, "pickled_jar__", "pickle")
     if is_newer(pickle_fil, log_fil):
@@ -534,6 +535,9 @@ def load_pickle(args, log_fil):
     return None
 
 def save_pickle(args, sched_events):
+    if args.pickle == False:
+        return
+
     pickle_fil = get_outfile_name(args, "pickled_jar__", "pickle")
     pj = pickled_jar(sched_events)
     with open(pickle_fil, mode="wb") as f:
@@ -579,7 +583,16 @@ def filter_sched_events(events, filter_fn, filter_data):
 
     return filtered_events
 
-def analyze_task_idle_stat():
+def is_meaningful_task(args, task_stat):
+    # filter out statically meaningless tasks
+    if task_stat.sched_num < args.minsched:
+        return False
+    # filter out never scheduled tasks
+    if task_stat.sched_num == 0 and task_stat.migrated_num == 0:
+        return False
+    return True
+
+def analyze_task_idle_stat(args):
     stat_names = ["task_name", "num_sched", "num_mig", # 0--2
                   "wait_time_med", "wait_time_avg",
                   "wait_time_aad", "wait_time_total", # 3--6
@@ -596,7 +609,8 @@ def analyze_task_idle_stat():
     for k, t in ev_task.task_dict.items():
         s = t.task_stat
 
-        if s.sched_num == 0 and s.migrated_num == 0:
+        # filter out statically meaningless tasks
+        if is_meaningful_task(args, s) == False:
             continue
 
         t_info = [str(t), s.sched_num, s.migrated_num]
@@ -904,7 +918,7 @@ def analyze_events(args, events):
     ev_task.analyze_stat()
 
     # analysis task & idle status
-    r.task_stat_names, r.task_stats, r.idle_stats = analyze_task_idle_stat()
+    r.task_stat_names, r.task_stats, r.idle_stats = analyze_task_idle_stat(args)
     r.task_stat_formats = ["{0:^30}"] + ["{0:>14}"] * (len(r.task_stat_names) - 1)
 
     # correlation analysis
@@ -922,6 +936,10 @@ def get_cmd_options(argv):
                         help='log file prefix') 
     parser.add_argument('-q', '--quiet', action='store_true',
                         help='do not print result to stdout' ) 
+    parser.add_argument('-p', '--pickle', action='store_true',
+                        help='use pickle whenever possible' ) 
+    parser.add_argument('-s', '--minsched', action='store', type=int, default=100,
+                        help='set the minimum number of schedules for task analysis' ) 
     args = parser.parse_args(argv)
     return args
 
