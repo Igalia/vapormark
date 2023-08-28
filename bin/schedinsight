@@ -3,13 +3,14 @@ import os
 import sys
 import argparse
 import csv
-import matplotlib.pyplot as plt
 import zlib
 import collections
 import statistics
 import datetime
 import subprocess
+import pickle
 import numpy as np
+import matplotlib.pyplot as plt
 
 def hash_rgb_from_str(s):
     h = zlib.crc32( bytes(s, 'utf-8') )
@@ -365,7 +366,7 @@ class ev_awake:
 
     def __repr__(self):
         return "\t".join(["A", str(self.time), str(self.cur_task), 
-                          "=>", str(self.awakened_task)])
+                          "=>", str(self.next_task)])
 
 class pearson_corr:
     x_label = ""
@@ -397,6 +398,16 @@ class analysis_results:
         idle_stats = []
         task_stat_formats = []
         corrs = []
+
+class pickled_jar:
+    task_dict = None
+    stackframe_dict = None
+    sched_events = None
+
+    def __init__(self, se):
+        self.task_dict = ev_task.task_dict
+        self.stackframe_dict = ev_callstack.stackframe_dict
+        self.sched_events = se
 
 def parse_ev_time(toks):
     time = float(toks[0])
@@ -504,20 +515,53 @@ def parse_sched_events(f):
         events[ev.time.time] = ev
     return events
 
+def is_newer(file_new, file_old):
+    if os.path.isfile(file_new) == False:
+        return False
+    return os.path.getmtime(file_new) > os.path.getmtime(file_old)
+
+def load_pickle(args, log_fil):
+    pickle_fil = get_outfile_name(args, "pickled_jar__", "pickle")
+    if is_newer(pickle_fil, log_fil):
+        with open(pickle_fil, mode="rb") as pf:
+            pj = pickle.load(pf)
+            # init class variables
+            ev_task.task_dict = pj.task_dict
+            ev_callstack.stackframe_dict = pj.stackframe_dict
+            return pj.sched_events
+    return None
+
+def save_pickle(args, sched_events):
+    pickle_fil = get_outfile_name(args, "pickled_jar__", "pickle")
+    pj = pickled_jar(sched_events)
+    with open(pickle_fil, mode="wb") as f:
+        pickle.dump(pj, f)
+
 def parse_schedmon_timehist(args):
     # get a log file name
-    log = get_schedmon_log_name(args, "timehist_full")
-    if os.path.isfile(log) == False:
-        log = get_schedmon_log_name(args, "timehist_short")
+    log_fil = get_schedmon_log_name(args, "timehist_full")
+    if os.path.isfile(log_fil) == False:
+        log_fil = get_schedmon_log_name(args, "timehist_short")
 
-    # parse the log
-    with open(log, "r") as f:
-        sched_events = parse_sched_events(f)
+    # first try to load the pickled events
+    sched_events = load_pickle(args, log_fil)
+    if sched_events != None:
+        print("bingo!") # FIXME TODO
+        return  sched_events
+
+    # if nothing pickled, parse the log and pickle it
+    with open(log_fil, "r") as f:
+        # try to load the pickled log first
+        sched_events = load_pickle(args, log_fil)
+
+        # parse and pickle the log
+        if sched_events == None:
+            sched_events = parse_sched_events(f)
+            save_pickle(args, sched_events)
         # - TODO: Runtime summary
         # - TODO: Terminated tasks:
         # - TODO: Idle stats:
         # - TODO: Overall smmary
-
     return sched_events
 
 def load_schedmon_timehist(args):
@@ -880,6 +924,7 @@ def get_cmd_options(argv):
     return args
 
 if __name__ == "__main__":
+    sys.setrecursionlimit(100000)
     args = get_cmd_options(sys.argv[1:])
 
     events = load_schedmon_timehist(args)
