@@ -185,7 +185,7 @@ class ev_task:
 
     @classmethod
     def get_instance(cls, tname, tid, pid):
-        key = '^'.join([tname, str(tid), str(pid)])
+        key = "%s[%d/%d]" % (tname, tid, pid)
         inst = cls.task_dict.get(key)
         if inst == None: 
             inst = cls(tname, tid, pid)
@@ -371,15 +371,19 @@ class ev_awake:
 class pearson_corr:
     x_label = ""
     y_label = ""
+    data_label = ""
     x_data  = None
     y_data  = None
+    data_names = None
     pcc     = None
 
-    def __init__(self, x, y):
+    def __init__(self, x, y, d):
         self.x_label = x
         self.y_label = y
+        self.data_label = d
         self.x_data  = None
         self.y_data  = None
+        self.data_names = None
         self.pcc     = None
 
 class analysis_results:
@@ -783,7 +787,10 @@ def plot_corr_figs(args, corrs, plot_name):
     # scatter plot
     for i, corr in enumerate(corrs):
         ax = axs[i]
-        ax.scatter(corr.x_data, corr.y_data)
+        colors = []
+        for name in corr.data_names:
+            colors.append( hash_rgb_from_str(name) )
+        ax.scatter(corr.x_data, corr.y_data, c=colors, marker="x")
         ax.set(xlabel=corr.x_label, ylabel=corr.y_label)
         ax.title.set_text("Correlation = " + "{:.2f}".format(corr.pcc[0,1]))
 
@@ -889,19 +896,19 @@ def get_stat(key, stat_names, stat_cols):
 
 def analyze_stats_correlation(args, results):
     # list of stat-pairs
-    results.corrs = [pearson_corr("num_sched", "num_mig"),
-                     pearson_corr("num_sched", "runtime_med"),
-                     pearson_corr("num_sched", "runtime_avg"),
-                     pearson_corr("runtime_avg", "runtime_aad"),
-                     pearson_corr("runtime_med", "runtime_aad"),
-                     pearson_corr("runtime_total", "runtime_avg"),
-                     pearson_corr("runtime_total", "runtime_med"),
-                     pearson_corr("sched_delay_med", "num_sched"),
-                     pearson_corr("sched_delay_avg", "num_sched"),
-                     pearson_corr("sched_delay_med", "runtime_med"),
-                     pearson_corr("sched_delay_avg", "runtime_med"),
-                     pearson_corr("sched_delay_med", "runtime_total"),
-                     pearson_corr("sched_delay_avg", "runtime_total"),
+    results.corrs = [pearson_corr("num_sched", "num_mig", "task_name"),
+                     # pearson_corr("num_sched", "runtime_med", "task_name"),
+                     # pearson_corr("num_sched", "runtime_avg", "task_name"),
+                     pearson_corr("runtime_avg", "runtime_aad", "task_name"),
+                     # pearson_corr("runtime_med", "runtime_aad", "task_name"),
+                     # pearson_corr("runtime_total", "runtime_avg", "task_name"),
+                     # pearson_corr("runtime_total", "runtime_med", "task_name"),
+                     # pearson_corr("sched_delay_med", "num_sched", "task_name"),
+                     # pearson_corr("sched_delay_avg", "num_sched", "task_name"),
+                     # pearson_corr("sched_delay_med", "runtime_med", "task_name"),
+                     # pearson_corr("sched_delay_avg", "runtime_med", "task_name"),
+                     # pearson_corr("sched_delay_med", "runtime_total", "task_name"),
+                     # pearson_corr("sched_delay_avg", "runtime_total", "task_name"),
                      ]
 
     # calc pearson correlations
@@ -909,6 +916,7 @@ def analyze_stats_correlation(args, results):
     for corr in results.corrs:
         corr.x_data = get_stat(corr.x_label, results.task_stat_names, stat_cols)
         corr.y_data = get_stat(corr.y_label, results.task_stat_names, stat_cols)
+        corr.data_names = get_stat(corr.data_label, results.task_stat_names, stat_cols)
         corr.pcc = np.corrcoef(np.array(corr.x_data), np.array(corr.y_data))
 
 def analyze_events(args, events):
@@ -961,30 +969,4 @@ if __name__ == "__main__":
     for time, ev in events.items():
         print(ev)
     """
-
-    '''
-    #### task stat
-    sched distibution: violin vs. histogram
-    runtime disribution: violon  vs. histogram
-    ideal runtime distribution: violin vs. histogram
-    wait time distribution
-    sched distribution
-    migration disribution
-
-        #### top tasks (percentail in sched, runtime, wait time)
-        sched distibution: violin vs. histogram
-        runtime disribution: violon  vs. histogram
-        ideal runtime distribution: violin vs. histogram
-        wait time distribution
-
-    #### waiter-waker analyis
-       2 distribution
-       3 distribution
-       or more
-
-    #### shced delay
-       scheduling in those ones
-
-    '''
-
 
