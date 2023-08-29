@@ -900,16 +900,28 @@ def get_stat(key, stat_names, stat_cols):
 
 def analyze_stats_correlation(args, results):
     # list of stat-pairs
-    results.corrs = [pearson_corr("num_sched", "num_mig", "task_name"),
-                     pearson_corr("runtime_avg", "runtime_aad", "task_name"), 
-                     pearson_corr("num_sched", "sched_delay_avg", "task_name"),
-                     pearson_corr("runtime_avg", "sched_delay_avg", "task_name"),
-                     pearson_corr("runtime_total", "sched_delay_avg", "task_name"),]
-                     # pearson_corr("num_sched", "runtime_med", "task_name"),
-                     # pearson_corr("num_sched", "runtime_avg", "task_name"),
-                     # pearson_corr("runtime_med", "runtime_aad", "task_name"),
-                     # pearson_corr("runtime_total", "runtime_avg", "task_name"),
-                     # pearson_corr("runtime_total", "runtime_med", "task_name"),
+    results.corrs = [
+            # Q. How userful is num_sched in predicting task's behavior?
+            pearson_corr("num_sched", "num_mig", "task_name"), 
+            pearson_corr("num_sched", "runtime_avg", "task_name"), 
+            #
+            # Q. How useful is the vruntime in predicting task's behavior?
+            pearson_corr("runtime_total", "num_sched", "task_name"),
+            pearson_corr("runtime_total", "runtime_avg", "task_name"),
+            # 
+            # Q. Is task's runtime stable?
+            pearson_corr("runtime_avg", "runtime_aad", "task_name"), 
+            #
+            # Q. Is task's wait time an useful indicator for something?
+            pearson_corr("num_sched", "wait_time_avg", "task_name"), 
+            pearson_corr("runtime_avg", "wait_time_avg", "task_name"), 
+            pearson_corr("wait_time_avg", "wait_time_aad", "task_name"), 
+            #
+            # Q. Can we predict scheding dealy?
+            pearson_corr("num_sched", "sched_delay_avg", "task_name"),
+            pearson_corr("runtime_avg", "sched_delay_avg", "task_name"),
+            pearson_corr("runtime_total", "sched_delay_avg", "task_name"),
+            ]
 
     # calc pearson correlations
     stat_cols = transpose_2d_list(results.task_stats)
