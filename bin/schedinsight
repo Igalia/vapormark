@@ -794,7 +794,7 @@ def plot_corr_figs(args, corrs, plot_name):
         ax.set(xlabel=corr.x_label, ylabel=corr.y_label)
         ax.title.set_text("Correlation = " + "{:.2f}".format(corr.pcc[0,1]))
 
-    # - save to the file
+    # - save to the filewineserver
     fig_name = get_outfile_name(args, plot_name, "svg")
     plt.savefig(fig_name)
 
@@ -805,6 +805,132 @@ def plot_task_dist_figs(args, stat_names, task_stats):
     stat_cols = transpose_2d_list(task_stats)
     for name, stat in zip(stat_names[1:-4], stat_cols[1:-4]):
         plot_dist_fig(args, "task_dist_" + name, sorted(stat), name, "", "")
+
+def plot_per_task_stat_over_time(args, ts):
+    # - prepare canvas
+    reset_plot()
+    fig, axs = plt.subplots(nrows=6, ncols=1, figsize=(3, 12), tight_layout=True)
+
+    # - wait  time (time serise)
+    # - delay time (time serise)
+    # - run   time (time serise)
+
+    # - wait  time (distribution)
+    # - delay time (distribution)
+    # - run   time (distribution)
+
+
+"""
+def plot_event_chart(args, plot_name, events):
+    ty_map = {}
+    ctask_map = {}
+    ntask_map = {}
+    cs_map = {}
+
+    # build data for plot
+    def append_color(m, c, i):
+        if m.get(c) == None:
+            m[c] = []
+        m[c].append(i)
+
+    for i, (time, ev) in enumerate(events.items()):
+        # - type
+        append_color(ty_map, ev.color, i)
+        append_color(ctask_map, ev.cur_task.color, i)
+        append_color(ntask_map, ev.next_task.color, i)
+        if ev.ty == ev_type.SCHED: 
+            append_color(cs_map, ev.callstack.color, i)
+        # TODO: not very useful if there are more than 1000 events
+        # TODO: extend the inerface to time range
+
+    # plot events
+    # - prepare canvas
+    reset_plot()
+    fig, axs = plt.subplots(nrows=4, ncols=1, figsize=(7, 3.5), tight_layout=True)
+
+    # - plot type
+    def plot_map(ax, m, title):
+        ax.tick_params(left = False, right = False , labelleft = False , 
+                       labelbottom = False, bottom = False)
+        for c, x_data in m.items():
+            ax.bar(x_data, [1] * len(x_data), align='edge', width=1, color = c)
+        ax.set_ylim(bottom = 0, top = 1)
+        ax.set_ylabel(title)
+
+    plot_map(axs[0], ty_map, "event type")
+    plot_map(axs[1], ctask_map, "current task")
+    plot_map(axs[2], cs_map, "callstack")
+    plot_map(axs[3], ntask_map, "next task")
+
+    # - decoration
+    axs[0].tick_params(labeltop = True, top = True)
+    axs[3].tick_params(labelbottom = True, bottom = True)
+    plt.subplots_adjust(hspace = 0)
+
+    # - save to the file
+    fig_name = get_outfile_name(args, plot_name, "svg")
+    plt.savefig(fig_name)
+
+class task_stat:
+    # task
+    ev_task = None
+
+    # ev_sched or ev_idle stat
+    sched_num = 0
+
+    sched_waits = None
+    sched_wait_med = 0.0
+    sched_wait_avg = 0.0
+    sched_wait_aad = 0.0
+    sched_wait_sum = 0.0
+
+    sched_delays = None
+    sched_delay_med = 0.0
+    sched_delay_avg = 0.0
+    sched_delay_aad = 0.0
+    sched_delay_sum = 0.0
+
+    sched_runs = None
+    sched_run_med = 0.0
+    sched_run_avg = 0.0
+    sched_run_aad = 0.0
+    sched_run_sum = 0.0
+    # TODO: sched_ideal_runs = []
+
+    # ev_mig stat
+    migrated_num = 0
+
+    # TODO: sched reason
+    # - iowait
+    # - lock_wait
+    # - preemption timeout
+    # - poll/epoll
+    # - pipe read
+
+    def __init__(self, ev_task):
+        self.ev_task = ev_task
+        self.sched_num = 0
+        self.sched_waits = []
+        self.sched_wait_med = 0.0
+        self.sched_wait_avg = 0.0
+        self.sched_wait_aad = 0.0
+        self.sched_wait_sum = 0.0
+
+        self.sched_delays = []
+        self.sched_delay_med = 0.0
+        self.sched_delay_avg = 0.0
+        self.sched_delay_aad = 0.0
+        self.sched_delay_sum = 0.0
+
+        self.sched_runs = []
+        self.sched_run_med = 0.0
+        self.sched_run_avg = 0.0
+        self.sched_run_aad = 0.0
+        self.sched_run_sum = 0.0
+
+        self.migrated_num = 0
+
+"""
 
 def get_res_path(args, fname):
     afil = os.path.join(args.outdir, fname)
@@ -913,6 +1039,8 @@ def analyze_stats_correlation(args, results):
             pearson_corr("runtime_avg", "runtime_aad", "task_name"), 
             #
             # Q. Is task's wait time an useful indicator for something?
+            pearson_corr("num_sched", "wait_time_total", "task_name"), 
+            pearson_corr("runtime_avg", "wait_time_total", "task_name"), 
             pearson_corr("num_sched", "wait_time_avg", "task_name"), 
             pearson_corr("runtime_avg", "wait_time_avg", "task_name"), 
             pearson_corr("wait_time_avg", "wait_time_aad", "task_name"), 
