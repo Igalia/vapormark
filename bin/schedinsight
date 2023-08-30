@@ -31,7 +31,8 @@ def average(l):
     return statistics.mean(l)
 
 def aad(l, avg):
-    # average absolute deviation: https://en.wikipedia.org/wiki/Average_absolute_deviation
+    # aad (average absolute deviation)
+    # https://en.wikipedia.org/wiki/Average_absolute_deviation
     if len(l) == 0:
         return 0.0
     sum = 0.0
@@ -245,10 +246,10 @@ class ev_period:
                           "%.3f" % self.run_time])
 class ev_callstack:
     # per-class variables
-    stackframe_dict= {} 
+    cs_dict = {} 
 
     # per-instanace variables
-    stackframe = ""
+    cs  = ""
     color = (0.0, 0.0, 0.0)
 
     # callstack to caller tasks
@@ -256,22 +257,31 @@ class ev_callstack:
 
     @classmethod
     def get_instance(cls, cs):
-        inst = cls.stackframe_dict.get(cs)
+        inst = cls.cs_dict.get(cs)
         if inst == None: 
             inst = cls(cs)
-            cls.stackframe_dict[cs] = inst
+            cls.cs_dict[cs] = inst
         return inst
+
+    @classmethod
+    def find(cls, cs):
+        return cls.cs_dict.get(cs, None)
+
+    @classmethod
+    def analyze_stat(cls):
+        for k, t in cls.task_dict.items():
+            t.task_stat.analyze_stat()
 
     def link_ctask(self, ctask):
         self.cs_ctasks.add(ctask)
 
     def __init__(self, cs):
-        self.stackframe = cs
+        self.cs = cs
         self.color = hash_rgb_from_str( str(self) )
         self.cs_ctasks = set()
 
     def __repr__(self):
-        return self.stackframe
+        return self.cs
 
 class ev_sched:
     # per-class variables
@@ -410,12 +420,12 @@ class analysis_results:
 
 class pickled_jar:
     task_dict = None
-    stackframe_dict = None
+    cs_dict = None
     sched_events = None
 
     def __init__(self, se):
         self.task_dict = ev_task.task_dict
-        self.stackframe_dict = ev_callstack.stackframe_dict
+        self.cs_dict = ev_callstack.cs_dict
         self.sched_events = se
 
 def parse_ev_time(toks):
@@ -462,8 +472,8 @@ def parse_ev_period(toks):
     return ev_period(w, s, r), toks[3:]
 
 def parse_ev_callstack(toks):
-    stackframe = ' '.join(toks)
-    return ev_callstack.get_instance(stackframe), []
+    cs = ' '.join(toks)
+    return ev_callstack.get_instance(cs), []
 
 def parse_ev_sched(toks, time):
     cur_task, toks = parse_ev_task(toks)
@@ -539,7 +549,7 @@ def load_pickle(args, log_fil):
             pj = pickle.load(pf)
             # init class variables
             ev_task.task_dict = pj.task_dict
-            ev_callstack.stackframe_dict = pj.stackframe_dict
+            ev_callstack.cs_dict = pj.cs_dict
             return pj.sched_events
     return None
 
@@ -1077,9 +1087,6 @@ if __name__ == "__main__":
     p.wait()
 
     """
-    for cs in ev_callstack.stackframe_dict:
-        print(cs)
-
     plot_event_chart(args, "test", events)
     events = filter_sched_events(events, lambda e, d: e.ty == ev_type.IDLE, None)
     for time, ev in events.items():
