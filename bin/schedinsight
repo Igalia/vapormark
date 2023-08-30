@@ -219,16 +219,19 @@ class ev_task:
         if cs_events == None:
             cs_events = self.ctask_cs_events[cs] = collections.OrderedDict()
         cs_events[ev.time.time] = ev
-        # - cs -> [ctasks]
+        # - cs -> {ctasks}
         if cs != None:
             cs.link_ctask(self)
 
-    def link_ntask(self, ev):
+    def link_ntask(self, ev, cs = None):
         # - next_task:ty -> [events]
         ty_events = self.ntask_ty_events.get(ev.ty)
         if ty_events == None:
             ty_events = self.ntask_ty_events[ev.ty] = collections.OrderedDict()
         self.ntask_ty_events[ev.time.time] = ev
+        # - cs -> {ntasks}
+        if cs != None:
+            cs.link_ntask(self)
 
 class ev_period:
     wait_time = 0.0
@@ -244,6 +247,8 @@ class ev_period:
         return "\t".join(["%.3f" % self.wait_time, 
                           "%.3f" % self.sch_delay,
                           "%.3f" % self.run_time])
+
+
 class ev_callstack:
     # per-class variables
     cs_dict = {} 
@@ -254,6 +259,7 @@ class ev_callstack:
 
     # callstack to caller tasks
     cs_ctasks = None
+    cs_ntasks = None
 
     @classmethod
     def get_instance(cls, cs):
@@ -269,16 +275,23 @@ class ev_callstack:
 
     @classmethod
     def analyze_stat(cls):
-        for k, t in cls.task_dict.items():
-            t.task_stat.analyze_stat()
+        pass
+        """
+        for k, cs in cls.cs_dict.items():
+            cs.cs_stat.analyze_stat()
+        """
 
     def link_ctask(self, ctask):
         self.cs_ctasks.add(ctask)
+
+    def link_ntask(self, ntask):
+        self.cs_ntasks.add(ntask)
 
     def __init__(self, cs):
         self.cs = cs
         self.color = hash_rgb_from_str( str(self) )
         self.cs_ctasks = set()
+        self.cs_ntasks = set()
 
     def __repr__(self):
         return self.cs
@@ -304,7 +317,7 @@ class ev_sched:
         self.next_task = next_task
 
         self.cur_task.link_ctask(self, self.callstack)
-        self.next_task.link_ntask(self)
+        self.next_task.link_ntask(self, self.callstack)
 
     def __repr__(self):
         return "\t".join(["S", str(self.time), str(self.cur_task), str(self.period), 
