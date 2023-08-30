@@ -76,6 +76,7 @@ def gen_pie_chart(args, scr_list):
     ax.pie(cnt_list, labels=label_list, colors=rgb_list)
     fig_name = get_log_name(args, "svg")
     plt.savefig(fig_name)
+    plt.close()
 
 def report_syscall_stat_in_csv(scr_list, f):
     print("%s, %s, %s" % ("{0:^20}".format("syscall"),

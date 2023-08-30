@@ -131,6 +131,7 @@ def gen_dist_fig(args, fea, ts, pss, title, x_label, y_label, min_max):
     # save to the file
     fig_name = get_log_name(args, fea, "svg")
     plt.savefig(fig_name)
+    plt.close()
 
 def gen_ts_fig(args, fea, ts, pss, title, x_label, y_label, min_max):
     # clear canvas
@@ -149,6 +150,7 @@ def gen_ts_fig(args, fea, ts, pss, title, x_label, y_label, min_max):
     # save to the file
     fig_name = get_log_name(args, fea + "-ts", "svg")
     plt.savefig(fig_name)
+    plt.close()
 
 def gen_violin_fig(args, fea, ts, pss, title, x_label, y_label, min_max):
     # clear canvas
@@ -175,6 +177,7 @@ def gen_violin_fig(args, fea, ts, pss, title, x_label, y_label, min_max):
     # save to the file
     fig_name = get_log_name(args, fea + "-violin", "svg")
     plt.savefig(fig_name)
+    plt.close()
 
 def gen_cdf_fig(args, fea, ts, pss, title, x_label, y_label, min_max):
     # clear canvas
@@ -201,6 +204,7 @@ def gen_cdf_fig(args, fea, ts, pss, title, x_label, y_label, min_max):
     # save to the file
     fig_name = get_log_name(args, fea + "-cdf", "svg")
     plt.savefig(fig_name)
+    plt.close()
 
 def gen_cdf_csv(args, ts, pss, y_label, f):
     # header
