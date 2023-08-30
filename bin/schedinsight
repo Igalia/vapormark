@@ -11,6 +11,7 @@ import subprocess
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
+import pdb
 
 def hash_rgb_from_str(s):
     h = zlib.crc32( bytes(s, 'utf-8') )
@@ -191,6 +192,10 @@ class ev_task:
             inst = cls(tname, tid, pid)
             cls.task_dict[key] = inst
         return inst
+
+    @classmethod
+    def find(cls, task_name):
+        return cls.task_dict.get(task_name, None)
 
     @classmethod
     def analyze_stat(cls):
@@ -712,6 +717,7 @@ def plot_event_chart(args, plot_name, events):
     # - save to the file
     fig_name = get_outfile_name(args, plot_name, "svg")
     plt.savefig(fig_name)
+    plt.close()
 
 def gen_stat_in_csv(col_names, col_formats, tuples, f):
     def get_sep(c, ncol):
@@ -777,6 +783,7 @@ def plot_dist_fig(args, plot_name, sorted_values, title, x_label, y_label):
     # - save to the file
     fig_name = get_outfile_name(args, plot_name, "svg")
     plt.savefig(fig_name)
+    plt.close()
 
 def plot_corr_figs(args, corrs, plot_name):
     # prepare canvas
@@ -797,6 +804,7 @@ def plot_corr_figs(args, corrs, plot_name):
     # - save to the filewineserver
     fig_name = get_outfile_name(args, plot_name, "svg")
     plt.savefig(fig_name)
+    plt.close()
 
 def transpose_2d_list(ll):
     return list(zip(*ll))
@@ -806,131 +814,45 @@ def plot_task_dist_figs(args, stat_names, task_stats):
     for name, stat in zip(stat_names[1:-4], stat_cols[1:-4]):
         plot_dist_fig(args, "task_dist_" + name, sorted(stat), name, "", "")
 
-def plot_per_task_stat_over_time(args, ts):
-    # - prepare canvas
+def plot_per_task_stat_over_time(args, ts, title, plot_name):
+    # prepare canvas
     reset_plot()
-    fig, axs = plt.subplots(nrows=6, ncols=1, figsize=(3, 12), tight_layout=True)
+    fig, axs = plt.subplots(nrows=6, ncols=1, figsize=(3, 7), tight_layout=True)
 
-    # - wait  time (time serise)
-    # - delay time (time serise)
-    # - run   time (time serise)
-
-    # - wait  time (distribution)
-    # - delay time (distribution)
-    # - run   time (distribution)
-
-
-"""
-def plot_event_chart(args, plot_name, events):
-    ty_map = {}
-    ctask_map = {}
-    ntask_map = {}
-    cs_map = {}
-
-    # build data for plot
-    def append_color(m, c, i):
-        if m.get(c) == None:
-            m[c] = []
-        m[c].append(i)
-
-    for i, (time, ev) in enumerate(events.items()):
-        # - type
-        append_color(ty_map, ev.color, i)
-        append_color(ctask_map, ev.cur_task.color, i)
-        append_color(ntask_map, ev.next_task.color, i)
-        if ev.ty == ev_type.SCHED: 
-            append_color(cs_map, ev.callstack.color, i)
-        # TODO: not very useful if there are more than 1000 events
-        # TODO: extend the inerface to time range
-
-    # plot events
-    # - prepare canvas
-    reset_plot()
-    fig, axs = plt.subplots(nrows=4, ncols=1, figsize=(7, 3.5), tight_layout=True)
-
-    # - plot type
-    def plot_map(ax, m, title):
-        ax.tick_params(left = False, right = False , labelleft = False , 
+    def plot_filled_line(ax, data, c, y_label):
+        l = len(data)
+        ax.plot(range(l), data, color = "black")
+        ax.fill_between(range(l), data, color = c)
+        ax.set_ylabel(y_label)
+        ax.tick_params(left = True, right = False, labelleft = True, 
                        labelbottom = False, bottom = False)
-        for c, x_data in m.items():
-            ax.bar(x_data, [1] * len(x_data), align='edge', width=1, color = c)
-        ax.set_ylim(bottom = 0, top = 1)
-        ax.set_ylabel(title)
 
-    plot_map(axs[0], ty_map, "event type")
-    plot_map(axs[1], ctask_map, "current task")
-    plot_map(axs[2], cs_map, "callstack")
-    plot_map(axs[3], ntask_map, "next task")
+    # time serises of wait time, sched delay, and runtimes
+    plot_filled_line(axs[0], ts.sched_waits, 
+                     ts.ev_task.color, "wait_time:ts")
+    plot_filled_line(axs[1], ts.sched_delays, 
+                     ts.ev_task.color, "sched_delay:ts")
+    plot_filled_line(axs[2], ts.sched_runs, 
+                     ts.ev_task.color, "runtime:ts")
 
-    # - decoration
+    # time serises of wait time, sched delay, and runtimes
+    plot_filled_line(axs[3], sorted(ts.sched_waits.copy()), 
+                     ts.ev_task.color, "wait_time:dist")
+    plot_filled_line(axs[4], sorted(ts.sched_delays.copy()), 
+                     ts.ev_task.color, "sched_delay:dist")
+    plot_filled_line(axs[5], sorted(ts.sched_runs.copy()), 
+                     ts.ev_task.color, "runtime:dist")
+
+    # decoration
+    axs[0].set_title(title)
     axs[0].tick_params(labeltop = True, top = True)
-    axs[3].tick_params(labelbottom = True, bottom = True)
+    axs[5].tick_params(labelbottom = True, bottom = True)
     plt.subplots_adjust(hspace = 0)
 
-    # - save to the file
+    # save to the file
     fig_name = get_outfile_name(args, plot_name, "svg")
     plt.savefig(fig_name)
-
-class task_stat:
-    # task
-    ev_task = None
-
-    # ev_sched or ev_idle stat
-    sched_num = 0
-
-    sched_waits = None
-    sched_wait_med = 0.0
-    sched_wait_avg = 0.0
-    sched_wait_aad = 0.0
-    sched_wait_sum = 0.0
-
-    sched_delays = None
-    sched_delay_med = 0.0
-    sched_delay_avg = 0.0
-    sched_delay_aad = 0.0
-    sched_delay_sum = 0.0
-
-    sched_runs = None
-    sched_run_med = 0.0
-    sched_run_avg = 0.0
-    sched_run_aad = 0.0
-    sched_run_sum = 0.0
-    # TODO: sched_ideal_runs = []
-
-    # ev_mig stat
-    migrated_num = 0
-
-    # TODO: sched reason
-    # - iowait
-    # - lock_wait
-    # - preemption timeout
-    # - poll/epoll
-    # - pipe read
-
-    def __init__(self, ev_task):
-        self.ev_task = ev_task
-        self.sched_num = 0
-        self.sched_waits = []
-        self.sched_wait_med = 0.0
-        self.sched_wait_avg = 0.0
-        self.sched_wait_aad = 0.0
-        self.sched_wait_sum = 0.0
-
-        self.sched_delays = []
-        self.sched_delay_med = 0.0
-        self.sched_delay_avg = 0.0
-        self.sched_delay_aad = 0.0
-        self.sched_delay_sum = 0.0
-
-        self.sched_runs = []
-        self.sched_run_med = 0.0
-        self.sched_run_avg = 0.0
-        self.sched_run_aad = 0.0
-        self.sched_run_sum = 0.0
-
-        self.migrated_num = 0
-
-"""
+    plt.close()
 
 def get_res_path(args, fname):
     afil = os.path.join(args.outdir, fname)
@@ -1017,6 +939,36 @@ def gen_task_stat_corr(args, results, md_f):
     afil, rfil = get_res_path(args, fig_name)
     print("![](" + rfil + ")", file = md_f)
     print("\n\n", file = md_f)
+
+
+def get_fssafe_task_name(task_name):
+    # NOTE: urlsafe_base64 encoding would be safer 
+    # but it is hard to know what it is.
+    non_safe_chars = [" ", "\t", "\\", "/", "[", "]", "{", "}", "&", 
+                      ":", "\n", "\"", "'", "$"]
+    for c in non_safe_chars:
+        task_name = task_name.replace(c, "_")
+    return task_name
+
+def gen_task_stat_over_time(args, results, md_f):
+    def get_index_stat_fea(results, fea_name):
+        for i, name in enumerate(results.task_stat_names):
+            if name == fea_name:
+                return i
+        return -1
+
+    # generate tsov graphs for all tasks
+    ti = get_index_stat_fea(results, "task_name")
+    for ts_r in results.task_stats:
+        task_name = ts_r[ti]
+        task_name_fssafe = get_fssafe_task_name(task_name)
+        task = ev_task.find(task_name)
+        task_color = task.color
+        task_stat = task.task_stat
+        plot_per_task_stat_over_time(args, task_stat, task_name_fssafe, 
+                                     "tsov_" + task_name_fssafe + "__")
+
+    # TODO: intergrate the results into the report
 
 def get_stat(key, stat_names, stat_cols):
     for stat_name, stat in zip(stat_names, stat_cols):
@@ -1107,6 +1059,7 @@ if __name__ == "__main__":
     with open(md_fname, "w") as md_f:
         gen_task_idle_stat(args, results, md_f)
         gen_task_stat_corr(args, results, md_f)
+        gen_task_stat_over_time(args, results, md_f)
 
     # convert the markdown to html
     html_fname = get_outfile_name(args, "report", "html")
