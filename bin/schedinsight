@@ -561,7 +561,6 @@ def parse_schedmon_timehist(args):
     # first try to load the pickled events
     sched_events = load_pickle(args, log_fil)
     if sched_events != None:
-        print("bingo!") # FIXME TODO
         return  sched_events
 
     # if nothing pickled, parse the log and pickle it
@@ -817,11 +816,10 @@ def plot_task_dist_figs(args, stat_names, task_stats):
 def plot_per_task_stat_over_time(args, ts, title, plot_name):
     # prepare canvas
     reset_plot()
-    fig, axs = plt.subplots(nrows=6, ncols=1, figsize=(3, 7), tight_layout=True)
+    fig, axs = plt.subplots(nrows=6, ncols=1, figsize=(3, 6.5), tight_layout=True)
 
     def plot_filled_line(ax, data, c, y_label):
         l = len(data)
-        ax.plot(range(l), data, color = "black")
         ax.fill_between(range(l), data, color = c)
         ax.set_ylabel(y_label)
         ax.tick_params(left = True, right = False, labelleft = True, 
@@ -872,7 +870,10 @@ def gen_md_title(title, f):
     print("---", file = f)
     print("\n\n", file = f)
 
-def gen_md_tbl_figs(args, col_names, fea, header, f):
+def noop(x):
+    return x
+
+def gen_md_tbl_figs(args, col_names, fea, header, f, trans_fn = noop):
     # generate header row
     if header:
         l1, l2 = "|", "|"
@@ -885,7 +886,7 @@ def gen_md_tbl_figs(args, col_names, fea, header, f):
     # figures
     l = "|"
     for col_name in col_names:
-        fig_name = get_outfile_name(args, fea + col_name, "svg")
+        fig_name = get_outfile_name(args, fea + trans_fn(col_name), "svg")
         afil, rfil = get_res_path(args, fig_name)
         img = "![](" + rfil + ")"
         l = l + " " + img + " | "
@@ -958,6 +959,7 @@ def gen_task_stat_over_time(args, results, md_f):
         return -1
 
     # generate tsov graphs for all tasks
+    task_names = []
     ti = get_index_stat_fea(results, "task_name")
     for ts_r in results.task_stats:
         task_name = ts_r[ti]
@@ -965,10 +967,17 @@ def gen_task_stat_over_time(args, results, md_f):
         task = ev_task.find(task_name)
         task_color = task.color
         task_stat = task.task_stat
+        task_names.append(task_name)
         plot_per_task_stat_over_time(args, task_stat, task_name_fssafe, 
-                                     "tsov_" + task_name_fssafe + "__")
+                                     "tsov_" + task_name_fssafe)
 
-    # TODO: intergrate the results into the report
+    # intergrate the results into the report
+    print("### Task's wait_time, sched_delay, and runtimes\n\n", file = md_f)
+    for i in range(0, len(task_names), 10):
+        gen_md_tbl_figs(args, task_names[i:i+10], "tsov_", True, 
+                        md_f, trans_fn = get_fssafe_task_name)
+        print("\n\n", file = md_f)
+    print("\n\n", file = md_f)
 
 def get_stat(key, stat_names, stat_cols):
     for stat_name, stat in zip(stat_names, stat_cols):
