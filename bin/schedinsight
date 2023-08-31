@@ -59,7 +59,7 @@ class ev_time:
 
 class task_stat:
     # task
-    ev_task = None
+    task = None
 
     # ev_sched or ev_idle stat
     sched_num = 0
@@ -93,8 +93,8 @@ class task_stat:
     # - poll/epoll
     # - pipe read
 
-    def __init__(self, ev_task):
-        self.ev_task = ev_task
+    def __init__(self, task):
+        self.task = task
         self.sched_num = 0
         self.sched_waits = []
         self.sched_wait_med = 0.0
@@ -118,10 +118,10 @@ class task_stat:
 
     def analyze_stat(self):
         # ev_sched or ev_idle?
-        if self.ev_task.is_idle() == True:
-            sched_events = self.ev_task.ctask_ty_events.get(ev_type.IDLE, collections.OrderedDict()) 
+        if self.task.is_idle() == True:
+            sched_events = self.task.ctask_ty_events.get(ev_type.IDLE, collections.OrderedDict()) 
         else:
-            sched_events = self.ev_task.ctask_ty_events.get(ev_type.SCHED, collections.OrderedDict())
+            sched_events = self.task.ctask_ty_events.get(ev_type.SCHED, collections.OrderedDict())
 
         for time, ev in sched_events.items():
             self.sched_waits.append(ev.period.wait_time)
@@ -147,7 +147,7 @@ class task_stat:
         self.sched_run_sum = sum(self.sched_runs)
 
         # ev_mig stat
-        migrated_events = self.ev_task.ctask_ty_events.get(ev_type.MIG, collections.OrderedDict()) 
+        migrated_events = self.task.ctask_ty_events.get(ev_type.MIG, collections.OrderedDict()) 
         self.migrated_num = len(migrated_events)
 
   
@@ -229,9 +229,6 @@ class ev_task:
         if ty_events == None:
             ty_events = self.ntask_ty_events[ev.ty] = collections.OrderedDict()
         self.ntask_ty_events[ev.time.time] = ev
-        # - cs -> {ntasks}
-        if cs != None:
-            cs.link_ntask(self)
 
 class ev_period:
     wait_time = 0.0
@@ -248,6 +245,23 @@ class ev_period:
                           "%.3f" % self.sch_delay,
                           "%.3f" % self.run_time])
 
+class callstack_stat:
+    # callstack
+    callstack = None
+
+    # callstack stats
+    num_ctask = 0
+    num_sched_events = 0
+
+    def __init__(self, cs):
+        self.callstack = cs
+        self.num_sched_events = 0
+
+    def analyze_stat(self):
+        self.num_ctask = len(self.callstack.cs_ctasks)
+        self.num_sched_events = 0
+        for ctask in self.callstack.cs_ctasks:
+            self.num_sched_events = self.num_sched_events + len(ctask.ctask_cs_events)
 
 class ev_callstack:
     # per-class variables
@@ -259,7 +273,9 @@ class ev_callstack:
 
     # callstack to caller tasks
     cs_ctasks = None
-    cs_ntasks = None
+
+    # callstack stat
+    callstack_stat = None
 
     @classmethod
     def get_instance(cls, cs):
@@ -275,11 +291,8 @@ class ev_callstack:
 
     @classmethod
     def analyze_stat(cls):
-        pass
-        """
         for k, cs in cls.cs_dict.items():
-            cs.cs_stat.analyze_stat()
-        """
+            cs.callstack_stat.analyze_stat()
 
     def link_ctask(self, ctask):
         self.cs_ctasks.add(ctask)
@@ -291,7 +304,7 @@ class ev_callstack:
         self.cs = cs
         self.color = hash_rgb_from_str( str(self) )
         self.cs_ctasks = set()
-        self.cs_ntasks = set()
+        self.callstack_stat = callstack_stat(self)
 
     def __repr__(self):
         return self.cs
@@ -424,12 +437,23 @@ class analysis_results:
     # pearson correlations
     corrs = None
 
+    # callstack 
+    cs_stat_names = None
+    cs_stats = None
+    cs_stat_formats = None
+
     def __init__(self):
+        # task & idle status
         task_stat_names = []
         task_stats = []
         idle_stats = []
         task_stat_formats = []
+        # pearson correlations
         corrs = []
+        # callstack 
+        cs_stat_names = []
+        cs_stats = []
+        cs_stat_formats = []
 
 class pickled_jar:
     task_dict = None
@@ -623,7 +647,8 @@ def is_meaningful_task(args, task_stat):
         return False
     return True
 
-def analyze_task_idle_stat(args):
+
+def analyze_task_idle_stat(args, r):
     stat_names = ["task_name", "num_sched", "num_mig", # 0--2
                   "wait_time_med", "wait_time_avg",
                   "wait_time_aad", "wait_time_total", # 3--6
@@ -633,6 +658,9 @@ def analyze_task_idle_stat(args):
                   "runtime_aad", "runtime_total", # 11-14
                   "rank_nsched", "rank_nmig", "rank_runtime", "score", # 15-18
                   ]
+
+    # per-task stats 
+    ev_task.analyze_stat()
 
     # collect system-wide task stats
     task_stats = []
@@ -678,7 +706,10 @@ def analyze_task_idle_stat(args):
     # soft by score
     task_stats.sort(key = lambda x: x[18])
 
-    return (stat_names, task_stats, idle_stats)
+    r.task_stat_names = stat_names
+    r.task_stats = task_stats
+    r.idle_stats = idle_stats
+    r.task_stat_formats = ["{0:^30}"] + ["{0:>14}"] * (len(r.task_stat_names) - 1)
 
 def get_outfile_name(args, kind, suffix):
     ofname = os.path.join(args.outdir, args.log + 
@@ -850,19 +881,19 @@ def plot_per_task_stat_over_time(args, ts, title, plot_name):
 
     # time serises of wait time, sched delay, and runtimes
     plot_filled_line(axs[0], ts.sched_waits, 
-                     ts.ev_task.color, "wait_time:ts")
+                     ts.task.color, "wait_time:ts")
     plot_filled_line(axs[1], ts.sched_delays, 
-                     ts.ev_task.color, "sched_delay:ts")
+                     ts.task.color, "sched_delay:ts")
     plot_filled_line(axs[2], ts.sched_runs, 
-                     ts.ev_task.color, "runtime:ts")
+                     ts.task.color, "runtime:ts")
 
     # time serises of wait time, sched delay, and runtimes
     plot_filled_line(axs[3], sorted(ts.sched_waits.copy()), 
-                     ts.ev_task.color, "wait_time:dist")
+                     ts.task.color, "wait_time:dist")
     plot_filled_line(axs[4], sorted(ts.sched_delays.copy()), 
-                     ts.ev_task.color, "sched_delay:dist")
+                     ts.task.color, "sched_delay:dist")
     plot_filled_line(axs[5], sorted(ts.sched_runs.copy()), 
-                     ts.ev_task.color, "runtime:dist")
+                     ts.task.color, "runtime:dist")
 
     # decoration
     axs[0].set_title(title)
@@ -1002,6 +1033,16 @@ def gen_task_stat_over_time(args, results, md_f):
         print("\n\n", file = md_f)
     print("\n\n", file = md_f)
 
+def gen_callstack_stat(args, results, md_f):
+    stat_names = results.cs_stat_names
+    stat_formats = results.cs_stat_formats
+    stats = results.cs_stats
+
+    # generate CSV data
+    ofname = get_outfile_name(args, "callstack_stat", "csv")
+    with open(ofname, "w") as f:
+        gen_stat_in_csv(stat_names, stat_formats, stats, f)
+
 def get_stat(key, stat_names, stat_cols):
     for stat_name, stat in zip(stat_names, stat_cols):
         if stat_name == key:
@@ -1043,18 +1084,31 @@ def analyze_stats_correlation(args, results):
         corr.data_names = get_stat(corr.data_label, results.task_stat_names, stat_cols)
         corr.pcc = np.corrcoef(np.array(corr.x_data), np.array(corr.y_data))
 
+def analyze_callstack(args, r):
+    ev_callstack.analyze_stat()
+
+    # collect call stack information
+    cs_stat_names = ["callstack", "num_sched", "num_task_scheduled_out"]
+    cs_stat_formats = ["{0:^50}"] + ["{0:>14}"] * (len(cs_stat_names) - 1)
+    cs_stats = []
+    for k, cs in ev_callstack.cs_dict.items():
+        s = cs.callstack_stat
+        cs_stats.append( (str(cs), s.num_sched_events, s.num_ctask) )
+
+    # sort by the number of events
+    cs_stats.sort(reverse = True, key = lambda x: x[1])
+
+    # return the results
+    r.cs_stat_names = cs_stat_names
+    r.cs_stat_formats = cs_stat_formats
+    r.cs_stats = cs_stats
+
 def analyze_events(args, events):
     r = analysis_results()
 
-    # build per-task stats 
-    ev_task.analyze_stat()
-
-    # analysis task & idle status
-    r.task_stat_names, r.task_stats, r.idle_stats = analyze_task_idle_stat(args)
-    r.task_stat_formats = ["{0:^30}"] + ["{0:>14}"] * (len(r.task_stat_names) - 1)
-
-    # correlation analysis
+    analyze_task_idle_stat(args, r)
     analyze_stats_correlation(args, r)
+    analyze_callstack(args, r)
 
     return r
 
@@ -1092,6 +1146,7 @@ if __name__ == "__main__":
         gen_task_idle_stat(args, results, md_f)
         gen_task_stat_corr(args, results, md_f)
         gen_task_stat_over_time(args, results, md_f)
+        gen_callstack_stat(args, results, md_f)
 
     # convert the markdown to html
     html_fname = get_outfile_name(args, "report", "html")
