@@ -163,9 +163,10 @@ class ev_task:
     color = (0.0, 0.0, 0.0)
 
     # task indexes to events
-    ctask_ty_events = None  # cur_task:ty  -> [events]
-    ctask_cs_events = None  # cur_task:cs  -> [events]
-    ntask_ty_events = None  # next_task:ty -> [events]
+    ctask_ty_events  = None  # cur_task:ty   -> [events]
+    ctask_cs_events  = None  # cur_task:cs   -> [events]
+    ctask_cst_events = None  # cur_task:cst  -> [events]
+    ntask_ty_events  = None  # next_task:ty  -> [events]
 
     # task stat
     task_stat = None
@@ -176,9 +177,10 @@ class ev_task:
         self.parent_id = pid
         self.color = hash_rgb_from_str( str(self) )
 
-        self.ctask_ty_events = collections.OrderedDict()
-        self.ctask_cs_events = collections.OrderedDict()
-        self.ntask_ty_events = collections.OrderedDict()
+        self.ctask_ty_events  = collections.OrderedDict()
+        self.ctask_cs_events  = collections.OrderedDict()
+        self.ctask_cst_events = collections.OrderedDict()
+        self.ntask_ty_events  = collections.OrderedDict()
 
         self.task_stat = task_stat(self)
 
@@ -214,14 +216,22 @@ class ev_task:
         if ty_events == None:
             ty_events = self.ctask_ty_events[ev.ty] = collections.OrderedDict()
         ty_events[ev.time.time] = ev
+
+        if cs == None:
+            return
         # - cur_task:cs -> [events]
         cs_events = self.ctask_cs_events.get(cs)
         if cs_events == None:
             cs_events = self.ctask_cs_events[cs] = collections.OrderedDict()
         cs_events[ev.time.time] = ev
+        # - cur_task:cst -> [events]
+        cst = cs.cs_type
+        cst_events = self.ctask_cst_events.get(cst)
+        if cst_events == None:
+            cst_events = self.ctask_cst_events[cst] = collections.OrderedDict()
+        cst_events[ev.time.time] = ev
         # - cs -> {ctasks}
-        if cs != None:
-            cs.link_ctask(self)
+        cs.link_ctask(self)
 
     def link_ntask(self, ev, cs = None):
         # - next_task:ty -> [events]
@@ -263,12 +273,96 @@ class callstack_stat:
         for ctask in self.callstack.cs_ctasks:
             self.num_sched_events = self.num_sched_events + len(ctask.ctask_cs_events)
 
+class callstack_type:
+    type_dict = None
+
+    @classmethod
+    def init(cls):
+        if cls.type_dict != None:
+            return
+        # dictionary for the know callsites
+        d = [
+                # wait for events
+                ("epoll_", "epoll"),
+                ("sys_poll", "poll"),
+                ("sys_select", "select"),
+                ("sys_pselect", "pselect"),
+                # pipe IO
+                ("pipe_read", "pipe_read"),
+                ("pipe_write", "pipe_write"),
+                # futex
+                ("futex_wake", "futex_wake"),
+                ("futex_wait", "futex_wait"),
+                ("sys_futex", "futex"),
+                ("futex_", "futex"),
+                # lock
+                ("up_read", "unlock"),
+                ("down_read", "lock"),
+                ("up_write", "unlock"),
+                ("down_write", "lock"),
+                ("_unlock", "unlock"),
+                ("_lock", "lock"),
+                # file IO
+                ("vfs_read", "vfs_read"),
+                ("vfs_write", "vfs_write"),
+                ("sys_read", "sys_read"),
+                ("sys_write", "sys_write"),
+                ("sys_ioctl", "ioctl"),
+                ("io_schedule", "io_schedule"),
+                ("page_fault", "page_fault"),
+                # network IO
+                ("sys_recvmsg", "recvmsg"),
+                ("sys_recvfrom", "recvfrom"),
+                ("sys_sendto", "sendto"),
+                # system call
+                ("sys_clone", "clone"),
+                ("ret_from_fork", "fork"),
+                ("do_exit", "exit"),
+                ("do_wait", "wait"),
+                ("sys_sched_yield", "yield"),
+                ("do_nanosleep", "sleep"),
+                ("sys_clock_nanosleep", "sleep"),
+                ("usleep", "sleep"),
+                ("syscall_", "syscall"),
+                ("syscall_", "syscall"),
+                # memory
+                ("do_mprotect", "mprotect"),
+                ("do_mmap", "mmap"),
+                ("kmem_cache_alloc", "alloc"),
+                ("vmalloc", "alloc"),
+                ("kmalloc", "alloc"),
+                # sched preemption
+                ("asm_sysvec_apic_timer_interrupt", "sched_preempt"),
+                ("asm_sysvec_reschedule_ipi", "sched_preempt"),
+                ("schedule_preempt_disabled", "sched_preempt"),
+                ("preempt_schedule", "sched_preempt"),
+                # sched wait
+                ("schedule_timeout", "sched_wait"),
+                ("wait_for_completion", "sched_wait"),
+                # others
+                ("try_to_wake_up", "try_to_wake_up"),
+                ("asm_common_interrupt", "hw_interrupt"),
+                ]
+        cls.type_dict = d 
+
+    @classmethod
+    def get_type(cls, cs):
+        if cls.type_dict == None:
+            cls.init()
+        for k, t in cls.type_dict:
+            if cs.find(k) != -1:
+                return t
+        return "[unknown]" # + cs
+
+
 class ev_callstack:
     # per-class variables
     cs_dict = {} 
+    cst_dict = {}
 
     # per-instanace variables
     cs  = ""
+    cs_type = ""
     color = (0.0, 0.0, 0.0)
 
     # callstack to caller tasks
@@ -281,8 +375,15 @@ class ev_callstack:
     def get_instance(cls, cs):
         inst = cls.cs_dict.get(cs)
         if inst == None: 
+            # create an instance
             inst = cls(cs)
+            # add it to the cs_dict
             cls.cs_dict[cs] = inst
+            # add it to the cst_dict
+            cst_set = cls.cst_dict.get(inst.cs_type)
+            if cst_set == None: 
+                cst_set = cls.cst_dict[inst.cs_type] = set()
+            cst_set.add(inst)
         return inst
 
     @classmethod
@@ -302,6 +403,7 @@ class ev_callstack:
 
     def __init__(self, cs):
         self.cs = cs
+        self.cs_type = callstack_type.get_type(cs)
         self.color = hash_rgb_from_str( str(self) )
         self.cs_ctasks = set()
         self.callstack_stat = callstack_stat(self)
@@ -442,18 +544,27 @@ class analysis_results:
     cs_stats = None
     cs_stat_formats = None
 
+    # callstack types
+    cst_stat_names = None
+    cst_stats = None
+    cst_stat_formats = None
+
     def __init__(self):
         # task & idle status
-        task_stat_names = []
-        task_stats = []
-        idle_stats = []
-        task_stat_formats = []
+        self.task_stat_names = []
+        self.task_stats = []
+        self.idle_stats = []
+        self.task_stat_formats = []
         # pearson correlations
-        corrs = []
+        self.corrs = []
         # callstack 
-        cs_stat_names = []
-        cs_stats = []
-        cs_stat_formats = []
+        self.cs_stat_names = []
+        self.cs_stats = []
+        self.cs_stat_formats = []
+        # callstack types
+        self.cst_stat_names = []
+        self.cst_stats = []
+        self.cst_stat_formats = []
 
 class pickled_jar:
     task_dict = None
@@ -464,6 +575,7 @@ class pickled_jar:
         self.task_dict = ev_task.task_dict
         self.cs_dict = ev_callstack.cs_dict
         self.sched_events = se
+
 
 def parse_ev_time(toks):
     time = float(toks[0])
@@ -1033,6 +1145,16 @@ def gen_task_stat_over_time(args, results, md_f):
         print("\n\n", file = md_f)
     print("\n\n", file = md_f)
 
+def gen_callstack_type_stat(args, results, md_f):
+    stat_names = results.cst_stat_names
+    stat_formats = results.cst_stat_formats
+    stats = results.cst_stats
+
+    # generate CSV data
+    ofname = get_outfile_name(args, "callstack_type_stat", "csv")
+    with open(ofname, "w") as f:
+        gen_stat_in_csv(stat_names, stat_formats, stats, f)
+
 def gen_callstack_stat(args, results, md_f):
     stat_names = results.cs_stat_names
     stat_formats = results.cs_stat_formats
@@ -1088,20 +1210,43 @@ def analyze_callstack(args, r):
     ev_callstack.analyze_stat()
 
     # collect call stack information
-    cs_stat_names = ["callstack", "num_sched", "num_task_scheduled_out"]
-    cs_stat_formats = ["{0:^50}"] + ["{0:>14}"] * (len(cs_stat_names) - 1)
-    cs_stats = []
+    stat_names = ["callstack", "num_sched", "num_task_scheduled_out"]
+    stat_formats = ["{0:^50}"] + ["{0:>14}"] * (len(stat_names) - 1)
+    stats = []
     for k, cs in ev_callstack.cs_dict.items():
         s = cs.callstack_stat
-        cs_stats.append( (str(cs), s.num_sched_events, s.num_ctask) )
+        stats.append( (str(cs), s.num_sched_events, s.num_ctask) )
 
     # sort by the number of events
-    cs_stats.sort(reverse = True, key = lambda x: x[1])
+    stats.sort(reverse = True, key = lambda x: x[1])
 
     # return the results
-    r.cs_stat_names = cs_stat_names
-    r.cs_stat_formats = cs_stat_formats
-    r.cs_stats = cs_stats
+    r.cs_stat_names = stat_names
+    r.cs_stat_formats = stat_formats
+    r.cs_stats = stats
+
+def analyze_callstack_type(args, r):
+    # aggregate cs state results with the same cs type
+    stat_names = ["callstack_type", "num_sched", "num_task_scheduled_out"]
+    stat_formats = ["{0:^50}"] + ["{0:>14}"] * (len(stat_names) - 1)
+    stats = []
+
+    for k, cst in ev_callstack.cst_dict.items():
+        ctask_set = set()
+        num_sched_events = 0
+        for cs in cst:
+            ctask_set = ctask_set.union(cs.cs_ctasks)
+            num_sched_events = num_sched_events + cs.callstack_stat.num_sched_events
+        num_ctask = len(ctask_set)
+        stats.append( (k, num_sched_events, num_ctask) )
+
+    # sort by the number of events
+    stats.sort(reverse = True, key = lambda x: x[1])
+
+    # return the results
+    r.cst_stat_names = stat_names
+    r.cst_stat_formats = stat_formats
+    r.cst_stats = stats
 
 def analyze_events(args, events):
     r = analysis_results()
@@ -1109,6 +1254,7 @@ def analyze_events(args, events):
     analyze_task_idle_stat(args, r)
     analyze_stats_correlation(args, r)
     analyze_callstack(args, r)
+    analyze_callstack_type(args, r)
 
     return r
 
@@ -1146,6 +1292,7 @@ if __name__ == "__main__":
         gen_task_idle_stat(args, results, md_f)
         gen_task_stat_corr(args, results, md_f)
         gen_task_stat_over_time(args, results, md_f)
+        gen_callstack_type_stat(args, results, md_f)
         gen_callstack_stat(args, results, md_f)
 
     # convert the markdown to html
