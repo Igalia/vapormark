@@ -1021,14 +1021,15 @@ def plot_per_task_stat_over_time(args, ts, title, plot_name):
 def plot_pie_chart(args, name_list, cnt_list, plot_name):
     # prep data
     total_cnt = sum(cnt_list)
-    label_list = list( map(lambda t: "%s (%.2f%s)" % (t[0], t[1] / total_cnt, "%"), 
+    label_list = list( map(lambda t: "%s (%.2f%s)" % 
+                           (t[0], 100.0 * t[1] / total_cnt, "%"), 
                            zip(name_list, cnt_list)) )
     rgb_list = list( map(lambda s: hash_rgb_from_str(s), name_list) )
 
     # prepare canvas
     reset_plot()
     plt.rcParams['font.size'] = 10
-    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(15, 13))
+    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(12, 11))
 
     # plot
     ax.pie(cnt_list, labels=label_list, colors=rgb_list)
