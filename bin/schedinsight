@@ -1018,6 +1018,26 @@ def plot_per_task_stat_over_time(args, ts, title, plot_name):
     plt.savefig(fig_name)
     plt.close()
 
+def plot_pie_chart(args, name_list, cnt_list, plot_name):
+    # prep data
+    total_cnt = sum(cnt_list)
+    label_list = list( map(lambda t: "%s (%.2f%s)" % (t[0], t[1] / total_cnt, "%"), 
+                           zip(name_list, cnt_list)) )
+    rgb_list = list( map(lambda s: hash_rgb_from_str(s), name_list) )
+
+    # prepare canvas
+    reset_plot()
+    plt.rcParams['font.size'] = 10
+    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(15, 13))
+
+    # plot
+    ax.pie(cnt_list, labels=label_list, colors=rgb_list)
+
+    # save fig
+    fig_name = get_outfile_name(args, plot_name, "svg")
+    plt.savefig(fig_name)
+    plt.close()
+
 def get_res_path(args, fname):
     afil = os.path.join(args.outdir, fname)
     rfil = os.path.relpath(afil, start = args.outdir)
@@ -1145,25 +1165,44 @@ def gen_task_stat_over_time(args, results, md_f):
         print("\n\n", file = md_f)
     print("\n\n", file = md_f)
 
-def gen_callstack_type_stat(args, results, md_f):
+def gen_callstack_stat(args, results, md_f):
+    # generate CSV data for raw callstacks
+    stat_names = results.cs_stat_names
+    stat_formats = results.cs_stat_formats
+    stats = results.cs_stats
+    ofname = get_outfile_name(args, "callstack_stat", "csv")
+    with open(ofname, "w") as f:
+        gen_stat_in_csv(stat_names, stat_formats, stats, f)
+
+    # generate CSV data for callstack types
     stat_names = results.cst_stat_names
     stat_formats = results.cst_stat_formats
     stats = results.cst_stats
-
-    # generate CSV data
     ofname = get_outfile_name(args, "callstack_type_stat", "csv")
     with open(ofname, "w") as f:
         gen_stat_in_csv(stat_names, stat_formats, stats, f)
 
-def gen_callstack_stat(args, results, md_f):
-    stat_names = results.cs_stat_names
-    stat_formats = results.cs_stat_formats
-    stats = results.cs_stats
+    # plot callstack types
+    trans_stats = list(zip(*stats))
+    name_list = trans_stats[0]
+    cnt_list = trans_stats[1]
+    plot_pie_chart(args, name_list, cnt_list, "callstack_type_stat")
 
-    # generate CSV data
+    # generate markdown
+    print("### Callstacks tiggered scheduling\n\n", file = md_f)
     ofname = get_outfile_name(args, "callstack_stat", "csv")
-    with open(ofname, "w") as f:
-        gen_stat_in_csv(stat_names, stat_formats, stats, f)
+    afil, rfil = get_res_path(args, ofname)
+    print("- [callstacks](" + rfil + ")", file = md_f)
+
+    ofname = get_outfile_name(args, "callstack_type_stat", "csv")
+    afil, rfil = get_res_path(args, ofname)
+    print("- [callstack types](" + rfil + ")", file = md_f)
+    print("\n\n", file = md_f)
+
+    ofname = get_outfile_name(args, "callstack_type_stat", "svg")
+    afil, rfil = get_res_path(args, ofname)
+    print("![](" + rfil + ")", file = md_f)
+    print("\n\n", file = md_f)
 
 def get_stat(key, stat_names, stat_cols):
     for stat_name, stat in zip(stat_names, stat_cols):
@@ -1292,7 +1331,6 @@ if __name__ == "__main__":
         gen_task_idle_stat(args, results, md_f)
         gen_task_stat_corr(args, results, md_f)
         gen_task_stat_over_time(args, results, md_f)
-        gen_callstack_type_stat(args, results, md_f)
         gen_callstack_stat(args, results, md_f)
 
     # convert the markdown to html
