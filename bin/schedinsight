@@ -57,6 +57,28 @@ class ev_time:
     def __repr__(self):
         return "\t".join(["%.6f" % self.time, "[%d]" % self.cpu_id])
 
+class task_waker_waiter:
+    # class dict
+    wcw_dict = None
+    wtw_dict = None
+    sep = "$^__^$"
+
+    @classmethod
+    def add_wcw(cls, t_waker, waiter_cs, t_waiter):
+        # add waker-callstack-waiter to wcw_dict
+        key = cls.sep.join( [str(t_waker), waiter_cs.cs, str(t_waiter)] )
+        if cls.wcw_dict == None:
+            cls.wcw_dict = {}
+        cnt = cls.wcw_dict.get(key, 0)
+        cls.wcw_dict[key] = cnt + 1
+
+        # add waker-callstack type-waiter to wtw_dict
+        key = cls.sep.join( [str(t_waker), waiter_cs.cs_type, str(t_waiter)] )
+        if cls.wtw_dict == None:
+            cls.wtw_dict = {}
+        cnt = cls.wtw_dict.get(key, 0)
+        cls.wtw_dict[key] = cnt + 1
+
 class task_stat:
     # task
     task = None
@@ -501,8 +523,8 @@ class ev_awake:
     def __init__(self, time, cur_task, awakened_task):
         self.time = time
 
-        self.cur_task = awakened_task # awakened task should be the key
-        self.next_task = cur_task     # next task is indeed an initiator
+        self.cur_task = awakened_task # awakened task (waiter) should be the key
+        self.next_task = cur_task     # next task is indeed an initiator (waker)
 
         self.cur_task.link_ctask(self)
         self.next_task.link_ntask(self)
@@ -530,6 +552,8 @@ class pearson_corr:
         self.pcc     = None
 
 class analysis_results:
+    sched_events = None
+
     # task & idle status
     task_stat_names = None
     task_stats = None
@@ -711,7 +735,7 @@ def save_pickle(args, sched_events):
     with open(pickle_fil, mode="wb") as f:
         pickle.dump(pj, f)
 
-def parse_schedmon_timehist(args):
+def parse_schedmon_timehist(args, results):
     # get a log file name
     log_fil = get_schedmon_log_name(args, "timehist_full")
     if os.path.isfile(log_fil) == False:
@@ -735,10 +759,8 @@ def parse_schedmon_timehist(args):
         # - TODO: Terminated tasks:
         # - TODO: Idle stats:
         # - TODO: Overall smmary
-    return sched_events
 
-def load_schedmon_timehist(args):
-    return parse_schedmon_timehist(args)
+    results.sched_events = sched_events
 
 def filter_sched_events(events, filter_fn, filter_data):
     filtered_events = collections.OrderedDict()
@@ -1287,16 +1309,41 @@ def analyze_callstack_type(args, r):
     r.cst_stat_names = stat_names
     r.cst_stat_formats = stat_formats
     r.cst_stats = stats
+    
 
-def analyze_events(args, events):
-    r = analysis_results()
+def analyze_waker_waiter(args, r):
+    def find_waiting_event(t_waiter, wake_at, events):
+        for i in reversed(range(wake_at)):
+            e = events[i]
+            if e.ty == ev_type.SCHED and e.cur_task == t_waiter:
+                return e
+        return None
 
-    analyze_task_idle_stat(args, r)
-    analyze_stats_correlation(args, r)
-    analyze_callstack(args, r)
-    analyze_callstack_type(args, r)
+    # process awake events
+    events = list(r.sched_events.values())
+    for i, e in enumerate(events):
+        if e.ty != ev_type.AWAKE:
+            continue
+        # find waker and waiter
+        t_waker  = e.next_task
+        t_waiter = e.cur_task 
 
-    return r
+        # find waiter's waiting call stack
+        wait_event = find_waiting_event(t_waiter, i, events)
+        if wait_event == None:
+            # the earlier part of the scheduling events would not be logged
+            continue
+        waiter_cs = wait_event.callstack
+
+        # add a wake relationship
+        task_waker_waiter.add_wcw(t_waker, waiter_cs, t_waiter)
+
+def analyze_events(args, results):
+    analyze_task_idle_stat(args, results)
+    analyze_stats_correlation(args, results)
+    analyze_callstack(args, results)
+    analyze_callstack_type(args, results)
+    analyze_waker_waiter(args, results)
 
 def get_cmd_options(argv):
     parser = argparse.ArgumentParser(
@@ -1323,8 +1370,9 @@ if __name__ == "__main__":
     args = get_cmd_options(sys.argv[1:])
 
     # load and analyze the log
-    events = load_schedmon_timehist(args)
-    results = analyze_events(args, events)
+    results = analysis_results()
+    parse_schedmon_timehist(args, results)
+    analyze_events(args, results)
 
     # generate a report in markdow
     md_fname = get_outfile_name(args, "report", "md")
