@@ -59,25 +59,59 @@ class ev_time:
 
 class task_waker_waiter:
     # class dict
-    wcw_dict = None
-    wtw_dict = None
+    wcw_dict = {}
+    wtw_dict = {}
+    task_set = set()
+    cs_set = set()
+    cst_set = set()
     sep = "$^__^$"
 
     @classmethod
     def add_wcw(cls, t_waker, waiter_cs, t_waiter):
         # add waker-callstack-waiter to wcw_dict
         key = cls.sep.join( [str(t_waker), waiter_cs.cs, str(t_waiter)] )
-        if cls.wcw_dict == None:
-            cls.wcw_dict = {}
         cnt = cls.wcw_dict.get(key, 0)
         cls.wcw_dict[key] = cnt + 1
 
         # add waker-callstack type-waiter to wtw_dict
         key = cls.sep.join( [str(t_waker), waiter_cs.cs_type, str(t_waiter)] )
-        if cls.wtw_dict == None:
-            cls.wtw_dict = {}
         cnt = cls.wtw_dict.get(key, 0)
         cls.wtw_dict[key] = cnt + 1
+
+        # maintain task and cs sets
+        cls.task_set.add(t_waker)
+        cls.task_set.add(t_waiter)
+        cls.cs_set.add(waiter_cs)
+        cls.cs_set.add(waiter_cs.cs_type)
+
+
+    @classmethod
+    def get_wcwn(cls):
+        # wcw_dict sort by count
+        wcw_s = list(cls.wcw_dict.items())
+        wcw_s.sort(reverse = True, key = lambda x: x[1])
+        for wcw, cnt in wcw_s:
+            toks = wcw.split(cls.sep)
+            yield(toks[0], toks[1], toks[2], cnt)
+
+    @classmethod
+    def get_wtwn(cls):
+        # wtw_dict sort by count
+        wtw_s = list(cls.wtw_dict.items())
+        wtw_s.sort(reverse = True, key = lambda x: x[1])
+        for wtw, cnt in wtw_s:
+            toks = wtw.split(cls.sep)
+            yield(toks[0], toks[1], toks[2], cnt)
+
+    @classmethod
+    def find_wcw(cls, s_waker, s_cs, s_waiter):
+        key = sep.join( [s_waker, s_cs, s_waiter] )
+        return cls.wcw_dict.get(key, 0)
+
+    @classmethod
+    def find_wtw(cls, s_waker, s_cst, s_waiter):
+        key = sep.join( [s_waker, s_cst, s_waiter] )
+        return cls.wtw_dict.get(key, 0)
 
 class task_stat:
     # task
@@ -573,6 +607,16 @@ class analysis_results:
     cst_stats = None
     cst_stat_formats = None
 
+    # waker-cs-waiter
+    wcw_stat_names = None
+    wcw_stat = None
+    wcw_stat_formats = None
+
+    # waker-cst-waiter
+    wtw_stat_names = None
+    wtw_stat = None
+    wtw_stat_formats = None
+
     def __init__(self):
         # task & idle status
         self.task_stat_names = []
@@ -589,6 +633,14 @@ class analysis_results:
         self.cst_stat_names = []
         self.cst_stats = []
         self.cst_stat_formats = []
+        # waker-cs-waiter
+        self.wcw_stat_names = []
+        self.wcw_stat = []
+        self.wcw_stat_formats = []
+        # waker-cst-waiter
+        self.wtw_stat_names = []
+        self.wtw_stat = []
+        self.wtw_stat_formats = []
 
 class pickled_jar:
     task_dict = None
@@ -1227,6 +1279,25 @@ def gen_callstack_stat(args, results, md_f):
     print("![](" + rfil + ")", file = md_f)
     print("\n\n", file = md_f)
 
+def gen_water_waker_stat(args, results, md_f):
+    r = results
+
+    # generate waker-cs-waiter stats in CSV
+    ofname = get_outfile_name(args, "wcwn", "csv")
+    with open(ofname, "w") as f:
+        gen_stat_in_csv(r.wcw_stat_names, r.wcw_stat_formats, r.wcw_stat, f)
+
+    # generate waker-cstwaiter stats in CSV
+    ofname = get_outfile_name(args, "wtwn", "csv")
+    with open(ofname, "w") as f:
+        gen_stat_in_csv(r.wtw_stat_names, r.wtw_stat_formats, r.wtw_stat, f)
+
+    # TODO
+    # - waker tasks
+    # - waiter tasks
+    # - cs
+    # - cst
+
 def get_stat(key, stat_names, stat_cols):
     for stat_name, stat in zip(stat_names, stat_cols):
         if stat_name == key:
@@ -1338,6 +1409,26 @@ def analyze_waker_waiter(args, r):
         # add a wake relationship
         task_waker_waiter.add_wcw(t_waker, waiter_cs, t_waiter)
 
+    # get waker-cs-waiter stats
+    stat_names = ["waker_task", "waiter_callstack", "waiter_task", "num_wake"]
+    stats = []
+    stat_formats = ["{0:^30}", "{0:^50}", "{0:^30}", "{0:>14}"]
+    for wcwn in task_waker_waiter.get_wcwn():
+        stats.append(wcwn)
+    r.wcw_stat_names = stat_names
+    r.wcw_stat = stats
+    r.wcw_stat_formats = stat_formats
+
+    # get waker-cst-waiter stats
+    stat_names = ["waker_task", "waiter_callstack_type", "waiter_task", "num_wake"]
+    stats = []
+    stat_formats = ["{0:^30}", "{0:^50}", "{0:^30}", "{0:>14}"]
+    for wtwn in task_waker_waiter.get_wtwn():
+        stats.append(wtwn)
+    r.wtw_stat_names = stat_names
+    r.wtw_stat = stats
+    r.wtw_stat_formats = stat_formats
+
 def analyze_events(args, results):
     analyze_task_idle_stat(args, results)
     analyze_stats_correlation(args, results)
@@ -1369,7 +1460,7 @@ if __name__ == "__main__":
     # get options
     args = get_cmd_options(sys.argv[1:])
 
-    # load and analyze the log
+    # parse and analyze the log
     results = analysis_results()
     parse_schedmon_timehist(args, results)
     analyze_events(args, results)
@@ -1381,6 +1472,7 @@ if __name__ == "__main__":
         gen_task_stat_corr(args, results, md_f)
         gen_task_stat_over_time(args, results, md_f)
         gen_callstack_stat(args, results, md_f)
+        gen_water_waker_stat(args, results, md_f)
 
     # convert the markdown to html
     html_fname = get_outfile_name(args, "report", "html")
