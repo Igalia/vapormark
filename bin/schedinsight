@@ -59,49 +59,121 @@ class ev_time:
 
 class task_waker_waiter:
     # class dict
-    wcw_dict = {}
-    wtw_dict = {}
+    wcwn_dict = {}      # (waker, callstack, waiter)     => count
+    wtwn_dict = {}      # (waiter, callstak type, waker) => count
+
+    w_cwn_ddict = {}    # waker => (callstack, waiter)   => count
+    w_twn_ddict = {}    # waker => (cs type, waiter)     => count
+
+    wc_wn_ddict = {}    # waiter => (waker, callstak)    => count
+    wt_wn_ddict = {}    # waiter => (waker, cs type)     => count
+    
+    waiter_dict = {}    # waiter                         => count
+    waker_dict = {}     # waker                          => count
+
+    cs_dict = {}        # cs                             => count
+    cst_dict = {}       # cst                            => count
+
     sep = "$@^__^@$"
 
     @classmethod
     def add_wcw(cls, t_waker, waiter_cs, t_waiter):
-        # add waker-callstack-waiter to wcw_dict
+        # (waker, callstack, waiter)     => count
         key = cls.sep.join( [str(t_waker), waiter_cs.cs, str(t_waiter)] )
-        cnt = cls.wcw_dict.get(key, 0)
-        cls.wcw_dict[key] = cnt + 1
-
-        # add waker-callstack type-waiter to wtw_dict
+        cls.wcwn_dict[key] = cls.wcwn_dict.get(key, 0) + 1
+        # (waiter, callstak type, waker) => count
         key = cls.sep.join( [str(t_waker), waiter_cs.cs_type, str(t_waiter)] )
-        cnt = cls.wtw_dict.get(key, 0)
-        cls.wtw_dict[key] = cnt + 1
+        cls.wtwn_dict[key] = cls.wtwn_dict.get(key, 0) + 1
+                                                 
+        # waker => (callstack, waiter)   => count
+        key = str(t_waker)
+        dic = cls.w_cwn_ddict.get(key, {})
+        key = cls.sep.join( [waiter_cs.cs, str(t_waiter)] )
+        dic[key] = dic.get(key, 0) + 1
+        # waker => (cs type, waiter)     => count
+        key = str(t_waker)
+        dic = cls.w_twn_ddict.get(key, {})
+        key = cls.sep.join( [waiter_cs.cs_type, str(t_waiter)] )
+        dic[key] = dic.get(key, 0) + 1
+
+        # waiter => (waker, callstak)    => count
+        key = str(t_waiter)
+        dic = cls.wc_wn_ddict.get(key, {})
+        key = cls.sep.join( [str(t_waker), waiter_cs.cs] )
+        dic[key] = dic.get(key, 0) + 1
+        # waiter => (waker, cs type)     => count
+        key = str(t_waiter)
+        dic = cls.wt_wn_ddict.get(key, {})
+        key = cls.sep.join( [str(t_waker), waiter_cs.cs_type] )
+        dic[key] = dic.get(key, 0) + 1
+                                                 
+        # waiter                         => count
+        key = str(t_waiter)
+        cls.waiter_dict[key] = cls.waiter_dict.get(key, 0) + 1
+        # waker                          => count
+        key = str(t_waker)
+        cls.waker_dict[key] = cls.waker_dict.get(key, 0) + 1
+
+        # cs                             => count
+        key = waiter_cs.cs
+        cls.cs_dict[key] = cls.cs_dict.get(key, 0) + 1
+        # cst                            => count
+        key = waiter_cs.cs_type
+        cls.cst_dict[key] = cls.cst_dict.get(key, 0) + 1
 
     @classmethod
     def get_wcwn(cls):
-        # wcw_dict sort by count
-        wcw_s = list(cls.wcw_dict.items())
-        wcw_s.sort(reverse = True, key = lambda x: x[1])
-        for wcw, cnt in wcw_s:
-            toks = wcw.split(cls.sep)
-            yield( [toks[0], toks[1], toks[2], cnt] )
+        data_s = list(cls.wcwn_dict.items())
+        data_s.sort(reverse = True, key = lambda x: x[1])
+        for data, cnt in data_s:
+            toks = data.split(cls.sep)
+            yield( [*toks, cnt] )
 
     @classmethod
     def get_wtwn(cls):
-        # wtw_dict sort by count
-        wtw_s = list(cls.wtw_dict.items())
-        wtw_s.sort(reverse = True, key = lambda x: x[1])
-        for wtw, cnt in wtw_s:
-            toks = wtw.split(cls.sep)
-            yield( [toks[0], toks[1], toks[2], cnt] )
+        data_s = list(cls.wtwn_dict.items())
+        data_s.sort(reverse = True, key = lambda x: x[1])
+        for data, cnt in data_s:
+            toks = data.split(cls.sep)
+            yield( [*toks, cnt] )
+
+    @classmethod
+    def get_waiter(cls):
+        data_s = list(cls.waiter_dict.items())
+        data_s.sort(reverse = True, key = lambda x: x[1])
+        for data, cnt in data_s:
+            yield( [data, cnt] )
+
+    @classmethod
+    def get_waker(cls):
+        data_s = list(cls.waker_dict.items())
+        data_s.sort(reverse = True, key = lambda x: x[1])
+        for data, cnt in data_s:
+            yield( [data, cnt] )
+
+    @classmethod
+    def get_cs(cls):
+        data_s = list(cls.cs_dict.items())
+        data_s.sort(reverse = True, key = lambda x: x[1])
+        for data, cnt in data_s:
+            yield( [data, cnt] )
+
+    @classmethod
+    def get_cst(cls):
+        data_s = list(cls.cst_dict.items())
+        data_s.sort(reverse = True, key = lambda x: x[1])
+        for data, cnt in data_s:
+            yield( [data, cnt] )
 
     @classmethod
     def find_wcw(cls, s_waker, s_cs, s_waiter):
         key = sep.join( [s_waker, s_cs, s_waiter] )
-        return cls.wcw_dict.get(key, 0)
+        return cls.wcwn_dict.get(key, 0)
 
     @classmethod
     def find_wtw(cls, s_waker, s_cst, s_waiter):
         key = sep.join( [s_waker, s_cst, s_waiter] )
-        return cls.wtw_dict.get(key, 0)
+        return cls.wtwn_dict.get(key, 0)
 
 class task_stat:
     # task
@@ -607,6 +679,27 @@ class analysis_results:
     wtw_stats = None
     wtw_stat_formats = None
 
+    # waiter
+    waiter_stats = None
+    waiter_stat_names = None
+    waiter_stat_formats = None
+
+    # waker stats
+    waker_stats = None
+    waker_stat_names = None
+    waker_stat_formats = None
+
+    # cs stats
+    wcw_cs_stats = None
+    wcw_cs_stat_names = None
+    wcw_cs_formats = None
+
+    # cst stats
+    wtw_cst_stats = None
+    wtw_cst_stat_names = None
+    wtw_cst_formats = None
+
+
     def __init__(self):
         # task & idle status
         self.task_stat_names = []
@@ -631,6 +724,22 @@ class analysis_results:
         self.wtw_stat_names = []
         self.wtw_stats = []
         self.wtw_stat_formats = []
+        # waiter
+        self.waiter_stats = []
+        self.waiter_stat_names = []
+        self.waiter_stat_formats = []
+        # waker stats
+        self.waker_stats = []
+        self.waker_stat_names = []
+        self.waker_stat_formats = []
+        # cs stats
+        self.wcw_cs_stats = []
+        self.wcw_cs_stat_names = []
+        self.wcw_cs_formats = []
+        # cst stats
+        self.wtw_cst_stats = []
+        self.wtw_cst_stat_names = []
+        self.wtw_cst_formats = []
 
 class pickled_jar:
     task_dict = None
@@ -1283,10 +1392,28 @@ def gen_water_waker_stat(args, results, md_f):
         gen_stat_in_csv(r.wtw_stat_names, r.wtw_stat_formats, r.wtw_stats, f)
 
     # TODO
-    # - waker tasks
-    # - waiter tasks
-    # - cs
-    # - cst
+    # -
+    # - 
+
+    # gen waker stats
+    ofname = get_outfile_name(args, "waiter_task", "csv")
+    with open(ofname, "w") as f:
+        gen_stat_in_csv(r.waiter_stat_names, r.waiter_stat_formats, r.waiter_stats, f)
+
+    # get waker stats
+    ofname = get_outfile_name(args, "waker_task", "csv")
+    with open(ofname, "w") as f:
+        gen_stat_in_csv(r.waker_stat_names, r.waker_stat_formats, r.waker_stats, f)
+
+    # get cs stats
+    ofname = get_outfile_name(args, "wcw_cs", "csv")
+    with open(ofname, "w") as f:
+        gen_stat_in_csv(r.wcw_cs_stat_names, r.wcw_cs_formats, r.wcw_cs_stats, f)
+
+    # get cst stats
+    ofname = get_outfile_name(args, "wtw_cs", "csv")
+    with open(ofname, "w") as f:
+        gen_stat_in_csv(r.wtw_cst_stat_names, r.wtw_cst_formats, r.wtw_cst_stats, f)
 
 def get_stat(key, stat_names, stat_cols):
     for stat_name, stat in zip(stat_names, stat_cols):
@@ -1372,30 +1499,13 @@ def analyze_callstack_type(args, r):
     r.cst_stats = stats
     
 
-def analyze_waker_waiter(args, r):
+def process_awake_event(r):
     def find_waiting_event(t_waiter, wake_at, events):
         for i in reversed(range(wake_at)):
             e = events[i]
             if e.ty == ev_type.SCHED and e.cur_task == t_waiter:
                 return e
         return None
-
-    def calc_ratio_n_cratio(stats):
-        # "waker_task", "waiter_callstack", "waiter_task"
-        # "num_wake", "wake_ratio", "wake_cratio"
-        col_l= list(zip(*stats))
-        t0_l, t1_l, t2_l, num_l = col_l[0], col_l[1], col_l[2], col_l[3]
-
-        ratio_l, cratio_l = [], []
-        total_num = sum(num_l) 
-        cratio = 0.0
-        for num in num_l:
-            ratio = 100.0 * (num/total_num)
-            cratio = cratio + ratio
-            ratio_l.append(ratio)
-            cratio_l.append(cratio)
-
-        return zip(t0_l, t1_l, t2_l, num_l, ratio_l, cratio_l)
 
     # process awake events
     events = list(r.sched_events.values())
@@ -1416,24 +1526,79 @@ def analyze_waker_waiter(args, r):
         # add a wake relationship
         task_waker_waiter.add_wcw(t_waker, waiter_cs, t_waiter)
 
+def append_ratio_n_cratio(stats):
+    # "waker_task", "waiter_callstack", "waiter_task"
+    # "num_wake", "wake_ratio", "wake_cratio"
+    col_l= list(zip(*stats))
+    t_ll, num_l = col_l[0:-1], col_l[-1]
+
+    ratio_l, cratio_l = [], []
+    total_num = sum(num_l) 
+    cratio = 0.0
+    for num in num_l:
+        ratio = 100.0 * (num/total_num)
+        cratio = cratio + ratio
+        ratio_l.append(ratio)
+        cratio_l.append(cratio)
+
+    return zip(*t_ll, num_l, ratio_l, cratio_l)
+
+def analyze_waker_waiter(args, r):
+    process_awake_event(r)
+
     # get waker-cs-waiter stats
-    stats = []
-    for wcwn in task_waker_waiter.get_wcwn():
-        stats.append(wcwn)
-    r.wcw_stats = calc_ratio_n_cratio(stats)
+    # - (waker, callstack, waiter)     => count
+    stats = list(task_waker_waiter.get_wcwn())
+    r.wcw_stats = append_ratio_n_cratio(stats)
     r.wcw_stat_names = ["waker_task", "waiter_callstack", "waiter_task",
                         "num_wake", "wake_ratio", "wake_cratio"]
     r.wcw_stat_formats = ["{0:^30}", "{0:^50}", "{0:^30}",
                           "{0:>14}", "{0:>14}", "{0:>14}"]
 
     # get waker-cst-waiter stats
-    stats = []
-    for wtwn in task_waker_waiter.get_wtwn():
-        stats.append(wtwn)
-    r.wtw_stats = calc_ratio_n_cratio(stats)
+    # - (waiter, callstak type, waker) => count
+    stats = list(task_waker_waiter.get_wtwn())
+    r.wtw_stats = append_ratio_n_cratio(stats)
     r.wtw_stat_names = ["waker_task", "waiter_callstack_type", "waiter_task",
                         "num_wake", "wake_ratio", "wake_cratio"]
     r.wtw_stat_formats = r.wcw_stat_formats
+
+    """
+    w_cwn_ddict = {}    # waker => (callstack, waiter)   => count
+    w_twn_ddict = {}    # waker => (cs type, waiter)     => count
+
+    wc_wn_ddict = {}    # waiter => (waker, callstak)    => count
+    wt_wn_ddict = {}    # waiter => (waker, cs type)     => count
+    
+    """
+
+    # get waiter stats
+    # - waiter                         => count
+    stats = list(task_waker_waiter.get_waiter())
+    r.waiter_stats = append_ratio_n_cratio(stats)
+    r.waiter_stat_names = ["waiter_task", "num_wake"]
+    r.waiter_stat_formats = ["{0:^30}", "{0:>14}"]
+
+    # get waker stats
+    # - waker                          => count
+    stats = list(task_waker_waiter.get_waker())
+    r.waker_stats = append_ratio_n_cratio(stats)
+    r.waker_stat_names = ["waker_task", "num_wake"]
+    r.waker_stat_formats = r.waiter_stat_formats
+
+    # get cs stats
+    # - cs                             => count
+    stats = list(task_waker_waiter.get_cs())
+    r.wcw_cs_stats = append_ratio_n_cratio(stats)
+    r.wcw_cs_stat_names = ["callstack", "num_wake"]
+    r.wcw_cs_formats = ["{0:^50}", "{0:>14}"]
+
+    # get cst stats
+    # - cst                            => count
+    stats = list(task_waker_waiter.get_cst())
+    r.wtw_cst_stats = append_ratio_n_cratio(stats)
+    r.wtw_cst_stat_names = ["callstack_type", "num_wake"]
+    r.wtw_cst_formats = ["{0:^50}", "{0:>14}"]
 
 def analyze_events(args, results):
     analyze_task_idle_stat(args, results)
