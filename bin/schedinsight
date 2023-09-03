@@ -166,6 +166,34 @@ class task_waker_waiter:
             yield( [data, cnt] )
 
     @classmethod
+    def get_w_cwn(cls, waker_s):
+        data_s = list(cls.w_cwn_ddict[waker_s].items())
+        data_s.sort(reverse = True, key = lambda x: x[1])
+        for data, cnt in data_s:
+            yield( [data, cnt] )
+
+    @classmethod
+    def get_w_twn(cls, waker_s):
+        data_s = list(cls.w_twn_ddict[waker_s].items())
+        data_s.sort(reverse = True, key = lambda x: x[1])
+        for data, cnt in data_s:
+            yield( [data, cnt] )
+
+    @classmethod
+    def get_wc_wn(cls, waiter_s):
+        data_s = list(cls.wc_wn_ddict[waiter_s].items())
+        data_s.sort(reverse = True, key = lambda x: x[1])
+        for data, cnt in data_s:
+            yield( [data, cnt] )
+
+    @classmethod
+    def get_wt_wn(cls, waiter_s):
+        data_s = list(cls.wt_wn_ddict[waiter_s].items())
+        data_s.sort(reverse = True, key = lambda x: x[1])
+        for data, cnt in data_s:
+            yield( [data, cnt] )
+
+    @classmethod
     def find_wcw(cls, s_waker, s_cs, s_waiter):
         key = sep.join( [s_waker, s_cs, s_waiter] )
         return cls.wcwn_dict.get(key, 0)
@@ -1411,7 +1439,7 @@ def gen_water_waker_stat(args, results, md_f):
         gen_stat_in_csv(r.wcw_cs_stat_names, r.wcw_cs_formats, r.wcw_cs_stats, f)
 
     # get cst stats
-    ofname = get_outfile_name(args, "wtw_cs", "csv")
+    ofname = get_outfile_name(args, "wtw_cst", "csv")
     with open(ofname, "w") as f:
         gen_stat_in_csv(r.wtw_cst_stat_names, r.wtw_cst_formats, r.wtw_cst_stats, f)
 
