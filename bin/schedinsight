@@ -61,10 +61,7 @@ class task_waker_waiter:
     # class dict
     wcw_dict = {}
     wtw_dict = {}
-    task_set = set()
-    cs_set = set()
-    cst_set = set()
-    sep = "$^__^$"
+    sep = "$@^__^@$"
 
     @classmethod
     def add_wcw(cls, t_waker, waiter_cs, t_waiter):
@@ -78,13 +75,6 @@ class task_waker_waiter:
         cnt = cls.wtw_dict.get(key, 0)
         cls.wtw_dict[key] = cnt + 1
 
-        # maintain task and cs sets
-        cls.task_set.add(t_waker)
-        cls.task_set.add(t_waiter)
-        cls.cs_set.add(waiter_cs)
-        cls.cs_set.add(waiter_cs.cs_type)
-
-
     @classmethod
     def get_wcwn(cls):
         # wcw_dict sort by count
@@ -92,7 +82,7 @@ class task_waker_waiter:
         wcw_s.sort(reverse = True, key = lambda x: x[1])
         for wcw, cnt in wcw_s:
             toks = wcw.split(cls.sep)
-            yield(toks[0], toks[1], toks[2], cnt)
+            yield( [toks[0], toks[1], toks[2], cnt] )
 
     @classmethod
     def get_wtwn(cls):
@@ -101,7 +91,7 @@ class task_waker_waiter:
         wtw_s.sort(reverse = True, key = lambda x: x[1])
         for wtw, cnt in wtw_s:
             toks = wtw.split(cls.sep)
-            yield(toks[0], toks[1], toks[2], cnt)
+            yield( [toks[0], toks[1], toks[2], cnt] )
 
     @classmethod
     def find_wcw(cls, s_waker, s_cs, s_waiter):
@@ -609,12 +599,12 @@ class analysis_results:
 
     # waker-cs-waiter
     wcw_stat_names = None
-    wcw_stat = None
+    wcw_stats = None
     wcw_stat_formats = None
 
     # waker-cst-waiter
     wtw_stat_names = None
-    wtw_stat = None
+    wtw_stats = None
     wtw_stat_formats = None
 
     def __init__(self):
@@ -635,11 +625,11 @@ class analysis_results:
         self.cst_stat_formats = []
         # waker-cs-waiter
         self.wcw_stat_names = []
-        self.wcw_stat = []
+        self.wcw_stats = []
         self.wcw_stat_formats = []
         # waker-cst-waiter
         self.wtw_stat_names = []
-        self.wtw_stat = []
+        self.wtw_stats = []
         self.wtw_stat_formats = []
 
 class pickled_jar:
@@ -1285,12 +1275,12 @@ def gen_water_waker_stat(args, results, md_f):
     # generate waker-cs-waiter stats in CSV
     ofname = get_outfile_name(args, "wcwn", "csv")
     with open(ofname, "w") as f:
-        gen_stat_in_csv(r.wcw_stat_names, r.wcw_stat_formats, r.wcw_stat, f)
+        gen_stat_in_csv(r.wcw_stat_names, r.wcw_stat_formats, r.wcw_stats, f)
 
     # generate waker-cstwaiter stats in CSV
     ofname = get_outfile_name(args, "wtwn", "csv")
     with open(ofname, "w") as f:
-        gen_stat_in_csv(r.wtw_stat_names, r.wtw_stat_formats, r.wtw_stat, f)
+        gen_stat_in_csv(r.wtw_stat_names, r.wtw_stat_formats, r.wtw_stats, f)
 
     # TODO
     # - waker tasks
@@ -1390,6 +1380,23 @@ def analyze_waker_waiter(args, r):
                 return e
         return None
 
+    def calc_ratio_n_cratio(stats):
+        # "waker_task", "waiter_callstack", "waiter_task"
+        # "num_wake", "wake_ratio", "wake_cratio"
+        col_l= list(zip(*stats))
+        t0_l, t1_l, t2_l, num_l = col_l[0], col_l[1], col_l[2], col_l[3]
+
+        ratio_l, cratio_l = [], []
+        total_num = sum(num_l) 
+        cratio = 0.0
+        for num in num_l:
+            ratio = 100.0 * (num/total_num)
+            cratio = cratio + ratio
+            ratio_l.append(ratio)
+            cratio_l.append(cratio)
+
+        return zip(t0_l, t1_l, t2_l, num_l, ratio_l, cratio_l)
+
     # process awake events
     events = list(r.sched_events.values())
     for i, e in enumerate(events):
@@ -1410,24 +1417,23 @@ def analyze_waker_waiter(args, r):
         task_waker_waiter.add_wcw(t_waker, waiter_cs, t_waiter)
 
     # get waker-cs-waiter stats
-    stat_names = ["waker_task", "waiter_callstack", "waiter_task", "num_wake"]
     stats = []
-    stat_formats = ["{0:^30}", "{0:^50}", "{0:^30}", "{0:>14}"]
     for wcwn in task_waker_waiter.get_wcwn():
         stats.append(wcwn)
-    r.wcw_stat_names = stat_names
-    r.wcw_stat = stats
-    r.wcw_stat_formats = stat_formats
+    r.wcw_stats = calc_ratio_n_cratio(stats)
+    r.wcw_stat_names = ["waker_task", "waiter_callstack", "waiter_task",
+                        "num_wake", "wake_ratio", "wake_cratio"]
+    r.wcw_stat_formats = ["{0:^30}", "{0:^50}", "{0:^30}",
+                          "{0:>14}", "{0:>14}", "{0:>14}"]
 
     # get waker-cst-waiter stats
-    stat_names = ["waker_task", "waiter_callstack_type", "waiter_task", "num_wake"]
     stats = []
-    stat_formats = ["{0:^30}", "{0:^50}", "{0:^30}", "{0:>14}"]
     for wtwn in task_waker_waiter.get_wtwn():
         stats.append(wtwn)
-    r.wtw_stat_names = stat_names
-    r.wtw_stat = stats
-    r.wtw_stat_formats = stat_formats
+    r.wtw_stats = calc_ratio_n_cratio(stats)
+    r.wtw_stat_names = ["waker_task", "waiter_callstack_type", "waiter_task",
+                        "num_wake", "wake_ratio", "wake_cratio"]
+    r.wtw_stat_formats = r.wcw_stat_formats
 
 def analyze_events(args, results):
     analyze_task_idle_stat(args, results)
