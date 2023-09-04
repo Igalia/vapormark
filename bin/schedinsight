@@ -65,8 +65,8 @@ class task_waker_waiter:
     w_cwn_ddict = {}    # waker => (callstack, waiter)   => count
     w_twn_ddict = {}    # waker => (cs type, waiter)     => count
 
-    wc_wn_ddict = {}    # waiter => (waker, callstak)    => count
-    wt_wn_ddict = {}    # waiter => (waker, cs type)     => count
+    wc_wn_ddict = {}    # waiter => (callstack, waker)   => count
+    wt_wn_ddict = {}    # waiter => (cs type, waker)     => count
     
     waiter_dict = {}    # waiter                         => count
     waker_dict = {}     # waker                          => count
@@ -100,19 +100,19 @@ class task_waker_waiter:
         key = cls.sep.join( [waiter_cs.cs_type, str(t_waiter)] )
         dic[key] = dic.get(key, 0) + 1
 
-        # waiter => (waker, callstak)    => count
+        # waiter => (callstack, waker)    => count
         key = str(t_waiter)
         dic = cls.wc_wn_ddict.get(key, None)
         if dic == None:
            dic = cls.wc_wn_ddict[key] = {}
-        key = cls.sep.join( [str(t_waker), waiter_cs.cs] )
+        key = cls.sep.join( [waiter_cs.cs, str(t_waker)] )
         dic[key] = dic.get(key, 0) + 1
-        # waiter => (waker, cs type)     => count
+        # waiter => (cs type, waker)     => count
         key = str(t_waiter)
         dic = cls.wt_wn_ddict.get(key, None)
         if dic == None:
             dic = cls.wt_wn_ddict[key] = {}
-        key = cls.sep.join( [str(t_waker), waiter_cs.cs_type] )
+        key = cls.sep.join( [waiter_cs.cs_type, str(t_waker)] )
         dic[key] = dic.get(key, 0) + 1
                                                  
         # waiter                         => count
