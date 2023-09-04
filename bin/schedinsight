@@ -4,6 +4,7 @@ import sys
 import argparse
 import csv
 import zlib
+import base64
 import collections
 import statistics
 import datetime
@@ -11,7 +12,10 @@ import subprocess
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
-import pdb
+import graphviz
+
+wcw_thrs = [5.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 
+            70.0, 80.0, 90.0, 95.0, 98.0, 99.0, 100.0]
 
 def hash_rgb_from_str(s):
     h = zlib.crc32( bytes(s, 'utf-8') )
@@ -19,6 +23,12 @@ def hash_rgb_from_str(s):
     g = (h & 0xFF0000) >> 16
     b = (h & 0x0000FF) >> 0
     return (float(r)/0xFF, float(g)/0xFF, float(b)/0xFF)
+
+def hex_color(rgb):
+    r = str(int(rgb[0] * 0xFF))
+    g = str(int(rgb[1] * 0xFF))
+    b = str(int(rgb[2] * 0xFF))
+    return "#" + r + g + b
 
 def median(l):
     if len(l) == 0:
@@ -204,16 +214,6 @@ class task_waker_waiter:
         for data, cnt in data_s:
             toks = data.split(cls.sep)
             yield( [waiter_s, *toks, cnt] )
-
-    @classmethod
-    def find_wcw(cls, s_waker, s_cs, s_waiter):
-        key = sep.join( [s_waker, s_cs, s_waiter] )
-        return cls.wcwn_dict.get(key, 0)
-
-    @classmethod
-    def find_wtw(cls, s_waker, s_cst, s_waiter):
-        key = sep.join( [s_waker, s_cst, s_waiter] )
-        return cls.wtwn_dict.get(key, 0)
 
 class task_stat:
     # task
@@ -1038,6 +1038,11 @@ def get_outfile_name(args, kind, suffix):
                           "-schedinsight-" + kind + "." + suffix)
     return ofname
 
+def get_outfile_name_x(args, kind, suffix):
+    odir = args.outdir
+    fname = args.log + "-schedinsight-" + kind 
+    return odir, fname, suffix
+
 def reset_plot():
     plt.clf()
     plt.style.use('default')
@@ -1252,6 +1257,38 @@ def plot_pie_chart(args, name_list, cnt_list, plot_name):
     plt.savefig(fig_name)
     plt.close()
 
+def plot_waker_waiter_graph(args, csv_data, plot_name, thr_cratio):
+    def safe_node_name(s):
+        return base64.urlsafe_b64encode(bytes(s, 'UTF-8')).decode("UTF-8")
+
+    g = graphviz.Digraph(comment="thr_cratio = %f" % thr_cratio)
+
+    # csv data: node1, edge, node2, num, ratio, cratio
+    #           [0,    1,    2,     3,   4,     5    ]
+    node_set = set()
+    # - add edges 
+    for node1, edge12, node2, num, ratio, cratio in csv_data.stats:
+        if cratio > thr_cratio:
+            break
+        node_set.add(node1)
+        node_set.add(node2)
+        g.edge(tail_name=safe_node_name(node1), 
+               head_name=safe_node_name(node2), 
+               label=" %s (%d)" % (edge12, num))
+    # - add nodes with filledcolor
+    for node in node_set:
+        node_color = hex_color( hash_rgb_from_str(node) )
+        g.node(name=safe_node_name(node), label=node, 
+               style="filled", fillcolor=node_color, color=node_color)
+        
+    # - save the graph to file
+    odir, fname, suffix = get_outfile_name_x(
+            args, plot_name + "_%f_dot" % thr_cratio, "svg")
+    g.format='svg'
+    g.filename = fname
+    g.directory = odir
+    g.render(view=False)
+
 def get_res_path(args, fname):
     afil = os.path.join(args.outdir, fname)
     rfil = os.path.relpath(afil, start = args.outdir)
@@ -1435,6 +1472,16 @@ def gen_waiter_waker_stat(args, results, md_f):
         trans_stats = list(zip(*data))
         plot_pie_chart(args, trans_stats[0], trans_stats[1], name)
 
+    # plot graphs
+    global wcw_thrs
+    for t in wcw_thrs:
+        __start_time = datetime.datetime.now()
+        plot_waker_waiter_graph(args, r.wtw_csv, "wtw_graph", t)
+        __end_time = datetime.datetime.now()
+        time_diff = (__end_time - __start_time).total_seconds()
+        if time_diff >= args.timelimit:
+            break
+
     # generate markdown
     print("### Waker-waiter analysis\n\n", file = md_f)
     for name, data, desc in csv_configs:
@@ -1449,6 +1496,15 @@ def gen_waiter_waker_stat(args, results, md_f):
         print("#### - " + desc +"\n", file = md_f)
         print("![](" + rfil + ")\n", file = md_f)
     print("\n\n", file = md_f)
+
+    for t in wcw_thrs:
+        ofname = get_outfile_name(args, "wtw_graph_%f_dot" % t, "svg")
+        if os.path.isfile(ofname):
+            afil, rfil = get_res_path(args, ofname)
+            print("#### - %.2f percentile of waker-waiter\n" % t, file = md_f)
+            print("![](" + rfil + ")\n", file = md_f)
+    print("\n\n", file = md_f)
+
 
 def get_stat(key, stat_names, stat_cols):
     for stat_name, stat in zip(stat_names, stat_cols):
@@ -1681,6 +1737,8 @@ def get_cmd_options(argv):
                         help='use pickle whenever possible' ) 
     parser.add_argument('-s', '--minsched', action='store', type=int, default=100,
                         help='set the minimum number of schedules for task analysis' ) 
+    parser.add_argument('-t', '--timelimit', action='store', type=int, default=400,
+                        help='time limit to draw a graph in seconds' ) 
     args = parser.parse_args(argv)
     return args
 
