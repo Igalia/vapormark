@@ -687,135 +687,94 @@ class pearson_corr:
         self.data_names = None
         self.pcc     = None
 
+class csv_data:
+    names = None
+    stats = None
+    formats = None
+
+    def __init__(self):
+        self.names = []
+        self.stats = []
+        self.formats = []
+
 class analysis_results:
     sched_events = None
-
-    # task & idle status
-    task_stat_names = None
-    task_stats = None
-    idle_stats = None
-    task_stat_formats = None
 
     # pearson correlations
     corrs = None
 
+    # task & idle status
+    task_csv = None
+    idle_csv = None
+
     # callstack 
-    cs_stat_names = None
-    cs_stats = None
-    cs_stat_formats = None
+    cs_csv = None
 
     # callstack types
-    cst_stat_names = None
-    cst_stats = None
-    cst_stat_formats = None
+    cst_csv = None
 
     # waker-cs-waiter
-    wcw_stat_names = None
-    wcw_stats = None
-    wcw_stat_formats = None
+    wcw_csv = None
 
     # waker-cst-waiter
-    wtw_stat_names = None
-    wtw_stats = None
-    wtw_stat_formats = None
+    wtw_csv = None
 
     # waker => cs-watier
-    w_cwn_stat_names = None
-    w_cwn_stats = None
-    w_cwn_stat_formats = None
+    w_cwn_csv = None
 
     # waker => cst- watier
-    w_twn_stat_names = None
-    w_twn_stats = None
-    w_twn_stat_formats = None
+    w_twn_csv = None
 
     # waiter => cs-waker
-    wc_wn_stat_names = None
-    wc_wn_stats = None
-    wc_wn_stat_formats = None
+    wc_wn_csv = None
 
     # waiter => cst- waker
-    wt_wn_stat_names = None
-    wt_wn_stats = None
-    wt_wn_stat_formats = None
+    wt_wn_csv = None
 
     # waiter
-    waiter_stats = None
-    waiter_stat_names = None
-    waiter_stat_formats = None
+    waiter_csv = None
 
     # waker stats
-    waker_stats = None
-    waker_stat_names = None
-    waker_stat_formats = None
+    waker_csv = None
 
     # cs stats
-    wcw_cs_stats = None
-    wcw_cs_stat_names = None
-    wcw_cs_formats = None
+    wcw_cs_csv = None
 
     # cst stats
-    wtw_cst_stats = None
-    wtw_cst_stat_names = None
-    wtw_cst_formats = None
+    wtw_cst_csv = None
 
 
     def __init__(self):
-        # task & idle status
-        self.task_stat_names = []
-        self.task_stats = []
-        self.idle_stats = []
-        self.task_stat_formats = []
         # pearson correlations
         self.corrs = []
+
+        # task & idle status
+        self.task_csv = csv_data()
+        self.idle_csv = csv_data()
         # callstack 
-        self.cs_stat_names = []
-        self.cs_stats = []
-        self.cs_stat_formats = []
+        self.cs_csv = csv_data()
         # callstack types
-        self.cst_stat_names = []
-        self.cst_stats = []
-        self.cst_stat_formats = []
+        self.cst_csv = csv_data()
         # waker-cs-waiter
-        self.wcw_stat_names = []
-        self.wcw_stats = []
-        self.wcw_stat_formats = []
+        self.wcw_csv = csv_data()
         # waker-cst-waiter
-        self.wtw_stat_names = []
-        self.wtw_stats = []
-        self.wtw_stat_formats = []
+        self.wtw_csv = csv_data()
         # waker => cs-watier
-        self.w_cwn_stat_names = []
-        self.w_cwn_stats = []
-        self.w_cwn_stat_formats = []
+        self.w_cwn_csv = csv_data()
         # waker => cst- watier
-        self.w_twn_stat_names = []
-        self.w_twn_stats = []
-        self.w_twn_stat_formats = []
+        self.w_twn_csv = csv_data()
         # waiter => cs-waker
-        self.wc_wn_stat_names = []
-        self.wc_wn_stats = []
-        self.wc_wn_stat_formats = []
+        self.wc_wn_csv = csv_data()
         # waiter => cst- waker
-        self.wt_wn_stat_names = []
-        self.wt_wn_stats = []
-        self.wt_wn_stat_formats = []
+        self.wt_wn_csv = csv_data()
         # waiter
-        self.waiter_stats = []
-        self.waiter_stat_names = []
-        self.waiter_stat_formats = []
+        self.waiter_csv = csv_data()
         # waker stats
-        self.waker_stats = []
-        self.waker_stat_names = []
-        self.waker_stat_formats = []
+        self.waker_csv = csv_data()
         # cs stats
-        self.wcw_cs_stats = []
-        self.wcw_cs_stat_names = []
-        self.wcw_cs_formats = []
+        self.wcw_cs_csv = csv_data()
         # cst stats
-        self.wtw_cst_stats = []
-        self.wtw_cst_stat_names = []
-        self.wtw_cst_formats = []
+        self.wtw_cst_csv = csv_data()
 
 class pickled_jar:
     task_dict = None
@@ -1066,11 +1025,13 @@ def analyze_task_idle_stat(args, r):
 
     # soft by score
     task_stats.sort(key = lambda x: x[18])
+    r.task_csv.names = stat_names
+    r.task_csv.formats = ["{0:^30}"] + ["{0:>14}"] * (len(r.task_csv.names) - 1)
+    r.task_csv.stats = task_stats
 
-    r.task_stat_names = stat_names
-    r.task_stats = task_stats
-    r.idle_stats = idle_stats
-    r.task_stat_formats = ["{0:^30}"] + ["{0:>14}"] * (len(r.task_stat_names) - 1)
+    r.idle_csv.names = stat_names
+    r.idle_csv.formats = ["{0:^30}"] + ["{0:>14}"] * (len(r.task_csv.names) - 1)
+    r.idle_csv.stats = idle_stats
 
 def get_outfile_name(args, kind, suffix):
     ofname = os.path.join(args.outdir, args.log + 
@@ -1133,7 +1094,10 @@ def plot_event_chart(args, plot_name, events):
     plt.savefig(fig_name)
     plt.close()
 
-def gen_stat_in_csv(col_names, col_formats, tuples, f):
+def gen_stat_in_csv(csv, f):
+    col_names = csv.names
+    col_formats = csv.formats
+    tuples = csv.stats
     def get_sep(c, ncol):
         if c == (ncol - 1):
             return "\n"
@@ -1343,28 +1307,23 @@ def gen_task_idle_stat_report(args, results, md_f):
     print("\n\n", file = md_f)
 
     # figs table
-    gen_md_tbl_figs(args, results.task_stat_names[1:-4], "task_dist_", True, md_f)
+    gen_md_tbl_figs(args, results.task_csv.names[1:-4], "task_dist_", True, md_f)
 
-def gen_task_idle_stat(args, results, md_f):
-    stat_names = results.task_stat_names
-    task_stats = results.task_stats
-    idle_stats = results.idle_stats
-    stat_formats = results.task_stat_formats
-
+def gen_task_idle_stat(args, r, md_f):
     # generate CSV data
     ofname = get_outfile_name(args, "task_stat", "csv")
     with open(ofname, "w") as f:
-        gen_stat_in_csv(stat_names, stat_formats, task_stats, f)
+        gen_stat_in_csv(r.task_csv, f)
 
     ofname = get_outfile_name(args, "idle_stat", "csv")
     with open(ofname, "w") as f:
-        gen_stat_in_csv(stat_names, stat_formats, idle_stats, f)
+        gen_stat_in_csv(r.idle_csv, f)
 
     # generate distribution graphs 
-    plot_task_dist_figs(args, stat_names, task_stats)
+    plot_task_dist_figs(args, r.task_csv.names, r.task_csv.stats)
 
     # generate markdown
-    gen_task_idle_stat_report(args, results, md_f)
+    gen_task_idle_stat_report(args, r, md_f)
 
 def gen_task_stat_corr(args, results, md_f):
     # generate correlation graphs
@@ -1389,7 +1348,7 @@ def get_fssafe_task_name(task_name):
 
 def gen_task_stat_over_time(args, results, md_f):
     def get_index_stat_fea(results, fea_name):
-        for i, name in enumerate(results.task_stat_names):
+        for i, name in enumerate(results.task_csv.names):
             if name == fea_name:
                 return i
         return -1
@@ -1397,7 +1356,7 @@ def gen_task_stat_over_time(args, results, md_f):
     # generate tsov graphs for all tasks
     task_names = []
     ti = get_index_stat_fea(results, "task_name")
-    for ts_r in results.task_stats:
+    for ts_r in results.task_csv.stats:
         task_name = ts_r[ti]
         task_name_fssafe = get_fssafe_task_name(task_name)
         task = ev_task.find(task_name)
@@ -1415,25 +1374,19 @@ def gen_task_stat_over_time(args, results, md_f):
         print("\n\n", file = md_f)
     print("\n\n", file = md_f)
 
-def gen_callstack_stat(args, results, md_f):
+def gen_callstack_stat(args, r, md_f):
     # generate CSV data for raw callstacks
-    stat_names = results.cs_stat_names
-    stat_formats = results.cs_stat_formats
-    stats = results.cs_stats
     ofname = get_outfile_name(args, "callstack_stat", "csv")
     with open(ofname, "w") as f:
-        gen_stat_in_csv(stat_names, stat_formats, stats, f)
+        gen_stat_in_csv(r.cs_csv, f)
 
     # generate CSV data for callstack types
-    stat_names = results.cst_stat_names
-    stat_formats = results.cst_stat_formats
-    stats = results.cst_stats
     ofname = get_outfile_name(args, "callstack_type_stat", "csv")
     with open(ofname, "w") as f:
-        gen_stat_in_csv(stat_names, stat_formats, stats, f)
+        gen_stat_in_csv(r.cst_csv, f)
 
     # plot callstack types
-    trans_stats = list(zip(*stats))
+    trans_stats = list(zip(*r.cst_csv.stats))
     name_list = trans_stats[0]
     cnt_list = trans_stats[1]
     plot_pie_chart(args, name_list, cnt_list, "callstack_type_stat")
@@ -1458,69 +1411,29 @@ def gen_waiter_waker_stat(args, results, md_f):
     r = results
 
     # generate the detailed data in CSV
-    # - generate waker-cs-waiter stats
-    ofname = get_outfile_name(args, "wcwn", "csv")
-    with open(ofname, "w") as f:
-        gen_stat_in_csv(r.wcw_stat_names, r.wcw_stat_formats, r.wcw_stats, f)
-
-    # - generate waker-cstwaiter stats
-    ofname = get_outfile_name(args, "wtwn", "csv")
-    with open(ofname, "w") as f:
-        gen_stat_in_csv(r.wtw_stat_names, r.wtw_stat_formats, r.wtw_stats, f)
-
-    # - generate waiter => cs-watier
-    ofname = get_outfile_name(args, "w_cwn", "csv")
-    with open(ofname, "w") as f:
-        gen_stat_in_csv(r.w_cwn_stat_names, r.w_cwn_stat_formats, r.w_cwn_stats, f)
-
-    # - generate waker => cst-waker
-    ofname = get_outfile_name(args, "w_twn", "csv")
-    with open(ofname, "w") as f:
-        gen_stat_in_csv(r.w_twn_stat_names, r.w_twn_stat_formats, r.w_twn_stats, f)
-
-    # - generate waiter => cs-watier
-    ofname = get_outfile_name(args, "wc_wn", "csv")
-    with open(ofname, "w") as f:
-        gen_stat_in_csv(r.wc_wn_stat_names, r.wc_wn_stat_formats, r.wc_wn_stats, f)
-
-    # - generate waker => cst-waker
-    ofname = get_outfile_name(args, "wt_wn", "csv")
-    with open(ofname, "w") as f:
-        gen_stat_in_csv(r.wt_wn_stat_names, r.wt_wn_stat_formats, r.wt_wn_stats, f)
-
-    # - gen waiter stats
-    ofname = get_outfile_name(args, "waiter_task", "csv")
-    with open(ofname, "w") as f:
-        gen_stat_in_csv(r.waiter_stat_names, r.waiter_stat_formats, r.waiter_stats, f)
-
-    # - get waker stats
-    ofname = get_outfile_name(args, "waker_task", "csv")
-    with open(ofname, "w") as f:
-        gen_stat_in_csv(r.waker_stat_names, r.waker_stat_formats, r.waker_stats, f)
-
-    # - get cs stats
-    ofname = get_outfile_name(args, "wcw_cs", "csv")
-    with open(ofname, "w") as f:
-        gen_stat_in_csv(r.wcw_cs_stat_names, r.wcw_cs_formats, r.wcw_cs_stats, f)
-
-    # - get cst stats
-    ofname = get_outfile_name(args, "wtw_cst", "csv")
-    with open(ofname, "w") as f:
-        gen_stat_in_csv(r.wtw_cst_stat_names, r.wtw_cst_formats, r.wtw_cst_stats, f)
+    configs = [("wcwn", r.wcw_csv),
+               ("wtwn", r.wtw_csv),
+               ("w_cwn", r.w_cwn_csv),
+               ("w_twn", r.w_twn_csv),
+               ("wc_wn", r.wc_wn_csv),
+               ("wt_wn", r.wt_wn_csv),
+               ("waiter_task", r.waiter_csv), 
+               ("waker_task", r.waker_csv),
+               ("wcw_cs", r.wcw_cs_csv), 
+               ("wtw_cst", r.wtw_cst_csv)]
+    for name, data in configs:
+        ofname = get_outfile_name(args, name, "csv")
+        with open(ofname, "w") as f:
+            gen_stat_in_csv(data, f)
 
     # plot overview data in pie charts
-    # - waiters
-    trans_stats = list(zip(*r.waiter_stats))
-    plot_pie_chart(args, trans_stats[0], trans_stats[1], "waiter_task")
-    # - wakers
-    trans_stats = list(zip(*r.waker_stats))
-    plot_pie_chart(args, trans_stats[0], trans_stats[1], "waker_task")
-    # - cs
-    trans_stats = list(zip(*r.wcw_cs_stats))
-    plot_pie_chart(args, trans_stats[0], trans_stats[1], "wcw_cs")
-    # - cs types
-    trans_stats = list(zip(*r.wtw_cst_stats))
-    plot_pie_chart(args, trans_stats[0], trans_stats[1], "wtw_cst")
+    configs = [("waiter_task", r.waiter_csv.stats),
+               ("waker_task", r.waker_csv.stats),
+               ("wcw_cs", r.wcw_cs_csv.stats),
+               ("wtw_cst", r.wtw_cst_csv.stats)]
+    for name, data in configs:
+        trans_stats = list(zip(*data))
+        plot_pie_chart(args, trans_stats[0], trans_stats[1], name)
 
 def get_stat(key, stat_names, stat_cols):
     for stat_name, stat in zip(stat_names, stat_cols):
@@ -1556,11 +1469,11 @@ def analyze_stats_correlation(args, results):
             ]
 
     # calc pearson correlations
-    stat_cols = transpose_2d_list(results.task_stats)
+    stat_cols = transpose_2d_list(results.task_csv.stats)
     for corr in results.corrs:
-        corr.x_data = get_stat(corr.x_label, results.task_stat_names, stat_cols)
-        corr.y_data = get_stat(corr.y_label, results.task_stat_names, stat_cols)
-        corr.data_names = get_stat(corr.data_label, results.task_stat_names, stat_cols)
+        corr.x_data = get_stat(corr.x_label, results.task_csv.names, stat_cols)
+        corr.y_data = get_stat(corr.y_label, results.task_csv.names, stat_cols)
+        corr.data_names = get_stat(corr.data_label, results.task_csv.names, stat_cols)
         corr.pcc = np.corrcoef(np.array(corr.x_data), np.array(corr.y_data))
 
 def analyze_callstack(args, r):
@@ -1578,9 +1491,9 @@ def analyze_callstack(args, r):
     stats.sort(reverse = True, key = lambda x: x[1])
 
     # return the results
-    r.cs_stat_names = stat_names
-    r.cs_stat_formats = stat_formats
-    r.cs_stats = stats
+    r.cs_csv.names = stat_names
+    r.cs_csv.formats = stat_formats
+    r.cs_csv.stats = stats
 
 def analyze_callstack_type(args, r):
     # aggregate cs state results with the same cs type
@@ -1601,9 +1514,9 @@ def analyze_callstack_type(args, r):
     stats.sort(reverse = True, key = lambda x: x[1])
 
     # return the results
-    r.cst_stat_names = stat_names
-    r.cst_stat_formats = stat_formats
-    r.cst_stats = stats
+    r.cst_csv.names = stat_names
+    r.cst_csv.formats = stat_formats
+    r.cst_csv.stats = stats
     
 
 def process_awake_event(r):
@@ -1656,82 +1569,81 @@ def analyze_waker_waiter(args, r):
     # get waker-cs-waiter stats
     # - (waker, callstack, waiter)     => count
     stats = list(task_waker_waiter.get_wcwn())
-    r.wcw_stats = append_ratio_n_cratio(stats)
-    r.wcw_stat_names = ["waker_task", "waiter_callstack", "waiter_task",
-                        "num_wake", "wake_ratio", "wake_cratio"]
-    r.wcw_stat_formats = ["{0:^30}", "{0:^50}", "{0:^30}",
-                          "{0:>14}", "{0:>14}", "{0:>14}"]
+    r.wcw_csv.stats = append_ratio_n_cratio(stats)
+    r.wcw_csv.names = ["waker_task", "waiter_callstack", "waiter_task",
+                       "num_wake", "wake_ratio", "wake_cratio"]
+    r.wcw_csv.formats = ["{0:^30}", "{0:^50}", "{0:^30}",
+                         "{0:>14}", "{0:>14}", "{0:>14}"]
 
     # get waker-cst-waiter stats
     # - (waiter, callstak type, waker) => count
     stats = list(task_waker_waiter.get_wtwn())
-    r.wtw_stats = append_ratio_n_cratio(stats)
-    r.wtw_stat_names = ["waker_task", "waiter_callstack_type", "waiter_task",
-                        "num_wake", "wake_ratio", "wake_cratio"]
-    r.wtw_stat_formats = r.wcw_stat_formats
+    r.wtw_csv.stats = append_ratio_n_cratio(stats)
+    r.wtw_csv.names = ["waker_task", "waiter_callstack_type", "waiter_task",
+                       "num_wake", "wake_ratio", "wake_cratio"]
+    r.wtw_csv.formats = r.wcw_csv.formats
 
     # waker => cs-watier, waker => cst-watier
     tasks = list(task_waker_waiter.get_waker())
     for task, cnt in tasks:
         stats = list(task_waker_waiter.get_w_cwn(str(task)))
-        r.w_cwn_stats = r.w_cwn_stats + append_ratio_n_cratio(stats)
+        r.w_cwn_csv.stats = r.w_cwn_csv.stats + append_ratio_n_cratio(stats)
 
         stats = list(task_waker_waiter.get_w_twn(str(task)))
-        r.w_twn_stats = r.w_twn_stats + append_ratio_n_cratio(stats)
+        r.w_twn_csv.stats = r.w_twn_csv.stats + append_ratio_n_cratio(stats)
 
-    r.w_cwn_stat_names = ["waker_task", "waiter_callstack", "waiter_task",
-                          "num_wake", "wake_ratio"]
-    r.w_twn_stat_names = ["waker_task", "waiter_callstack_type", "waiter_task", 
-                          "num_wake", "wake_ratio"]
-    r.w_cwn_stat_formats = ["{0:^30}", "{0:^50}", "{0:^30}",
-                            "{0:>14}", "{0:>14}"]
-    r.w_twn_stat_formats = r.w_cwn_stat_formats
+    r.w_cwn_csv.names = ["waker_task", "waiter_callstack", "waiter_task",
+                         "num_wake", "wake_ratio"]
+    r.w_twn_csv.names = ["waker_task", "waiter_callstack_type", "waiter_task", 
+                         "num_wake", "wake_ratio"]
+    r.w_cwn_csv.formats = ["{0:^30}", "{0:^50}", "{0:^30}",
+                           "{0:>14}", "{0:>14}"]
+    r.w_twn_csv.formats = r.w_cwn_csv.formats
 
     # waiter => cs-watier, waker => cst-waker
     tasks = list(task_waker_waiter.get_waiter())
     for task, cnt in tasks:
         stats = list(task_waker_waiter.get_wc_wn(str(task)))
-        r.wc_wn_stats = r.wc_wn_stats + append_ratio_n_cratio(stats)
+        r.wc_wn_csv.stats = r.wc_wn_csv.stats + append_ratio_n_cratio(stats)
 
         stats = list(task_waker_waiter.get_wt_wn(str(task)))
-        r.wt_wn_stats = r.wt_wn_stats + append_ratio_n_cratio(stats)
+        r.wt_wn_csv.stats = r.wt_wn_csv.stats + append_ratio_n_cratio(stats)
 
-    r.wc_wn_stat_names = ["waiter_task", "waiter_callstack", "waker_task",
-                          "num_wake", "wake_ratio"]
-    r.wt_wn_stat_names = ["waiter_task", "waiter_callstack_type", "waker_task",
-                          "num_wake", "wake_ratio"]
-    r.wc_wn_stat_formats = ["{0:^30}", "{0:^50}", "{0:^30}",
-                            "{0:>14}", "{0:>14}"]
-    r.wt_wn_stat_formats = r.wc_wn_stat_formats
+    r.wc_wn_csv.names = ["waiter_task", "waiter_callstack", "waker_task",
+                         "num_wake", "wake_ratio"]
+    r.wt_wn_csv.names = ["waiter_task", "waiter_callstack_type", "waker_task",
+                         "num_wake", "wake_ratio"]
+    r.wc_wn_csv.formats = ["{0:^30}", "{0:^50}", "{0:^30}",
+                           "{0:>14}", "{0:>14}"]
+    r.wt_wn_csv.formats = r.wc_wn_csv.formats
 
     # get waiter stats
     # - waiter                         => count
     stats = list(task_waker_waiter.get_waiter())
-    r.waiter_stats = append_ratio_n_cratio(stats)
-    r.waiter_stat_names = ["waiter_task", "num_wake", "wake_ratio", "wake_cratio"]
-    r.waiter_stat_formats = ["{0:^30}", "{0:>14}", "{0:>14}", "{0:>14}"]
+    r.waiter_csv.stats = append_ratio_n_cratio(stats)
+    r.waiter_csv.names = ["waiter_task", "num_wake", "wake_ratio", "wake_cratio"]
+    r.waiter_csv.formats = ["{0:^30}", "{0:>14}", "{0:>14}", "{0:>14}"]
 
     # get waker stats
     # - waker                          => count
     stats = list(task_waker_waiter.get_waker())
-    r.waker_stats = append_ratio_n_cratio(stats)
-    r.waker_stat_names = ["waker_task", "num_wake", "wake_ratio", "wake_cratio"]
-
-    r.waker_stat_formats = r.waiter_stat_formats
+    r.waker_csv.stats = append_ratio_n_cratio(stats)
+    r.waker_csv.names = ["waker_task", "num_wake", "wake_ratio", "wake_cratio"]
+    r.waker_csv.formats = r.waiter_csv.formats
 
     # get cs stats
     # - cs                             => count
     stats = list(task_waker_waiter.get_cs())
-    r.wcw_cs_stats = append_ratio_n_cratio(stats)
-    r.wcw_cs_stat_names = ["callstack", "num_wake", "wake_ratio", "wake_cratio"]
-    r.wcw_cs_formats = ["{0:^50}", "{0:>14}", "{0:>14}", "{0:>14}"]
+    r.wcw_cs_csv.stats = append_ratio_n_cratio(stats)
+    r.wcw_cs_csv.names = ["callstack", "num_wake", "wake_ratio", "wake_cratio"]
+    r.wcw_cs_csv. formats = ["{0:^50}", "{0:>14}", "{0:>14}", "{0:>14}"]
   
     # get cst stats
     # - cst                            => count
     stats = list(task_waker_waiter.get_cst())
-    r.wtw_cst_stats = append_ratio_n_cratio(stats)
-    r.wtw_cst_stat_names = ["callstack_type", "num_wake", "wake_ratio", "wake_cratio"]
-    r.wtw_cst_formats = ["{0:^50}", "{0:>14}", "{0:>14}", "{0:>14}"]
+    r.wtw_cst_csv.stats= append_ratio_n_cratio(stats)
+    r.wtw_cst_csv.names = ["callstack_type", "num_wake", "wake_ratio", "wake_cratio"]
+    r.wtw_cst_csv.formats = ["{0:^50}", "{0:>14}", "{0:>14}", "{0:>14}"]
 
 def analyze_events(args, results):
     analyze_task_idle_stat(args, results)
