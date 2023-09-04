@@ -1457,54 +1457,70 @@ def gen_callstack_stat(args, results, md_f):
 def gen_waiter_waker_stat(args, results, md_f):
     r = results
 
-    # generate waker-cs-waiter stats in CSV
+    # generate the detailed data in CSV
+    # - generate waker-cs-waiter stats
     ofname = get_outfile_name(args, "wcwn", "csv")
     with open(ofname, "w") as f:
         gen_stat_in_csv(r.wcw_stat_names, r.wcw_stat_formats, r.wcw_stats, f)
 
-    # generate waker-cstwaiter stats in CSV
+    # - generate waker-cstwaiter stats
     ofname = get_outfile_name(args, "wtwn", "csv")
     with open(ofname, "w") as f:
         gen_stat_in_csv(r.wtw_stat_names, r.wtw_stat_formats, r.wtw_stats, f)
 
-    # generate waiter => cs-watier
+    # - generate waiter => cs-watier
     ofname = get_outfile_name(args, "w_cwn", "csv")
     with open(ofname, "w") as f:
         gen_stat_in_csv(r.w_cwn_stat_names, r.w_cwn_stat_formats, r.w_cwn_stats, f)
 
-    # generate waker => cst-waker
+    # - generate waker => cst-waker
     ofname = get_outfile_name(args, "w_twn", "csv")
     with open(ofname, "w") as f:
         gen_stat_in_csv(r.w_twn_stat_names, r.w_twn_stat_formats, r.w_twn_stats, f)
 
-    # generate waiter => cs-watier
+    # - generate waiter => cs-watier
     ofname = get_outfile_name(args, "wc_wn", "csv")
     with open(ofname, "w") as f:
         gen_stat_in_csv(r.wc_wn_stat_names, r.wc_wn_stat_formats, r.wc_wn_stats, f)
-    # generate waker => cst-waker
+
+    # - generate waker => cst-waker
     ofname = get_outfile_name(args, "wt_wn", "csv")
     with open(ofname, "w") as f:
         gen_stat_in_csv(r.wt_wn_stat_names, r.wt_wn_stat_formats, r.wt_wn_stats, f)
 
-    # gen waker stats
+    # - gen waiter stats
     ofname = get_outfile_name(args, "waiter_task", "csv")
     with open(ofname, "w") as f:
         gen_stat_in_csv(r.waiter_stat_names, r.waiter_stat_formats, r.waiter_stats, f)
 
-    # get waker stats
+    # - get waker stats
     ofname = get_outfile_name(args, "waker_task", "csv")
     with open(ofname, "w") as f:
         gen_stat_in_csv(r.waker_stat_names, r.waker_stat_formats, r.waker_stats, f)
 
-    # get cs stats
+    # - get cs stats
     ofname = get_outfile_name(args, "wcw_cs", "csv")
     with open(ofname, "w") as f:
         gen_stat_in_csv(r.wcw_cs_stat_names, r.wcw_cs_formats, r.wcw_cs_stats, f)
 
-    # get cst stats
+    # - get cst stats
     ofname = get_outfile_name(args, "wtw_cst", "csv")
     with open(ofname, "w") as f:
         gen_stat_in_csv(r.wtw_cst_stat_names, r.wtw_cst_formats, r.wtw_cst_stats, f)
+
+    # plot overview data in pie charts
+    # - waiters
+    trans_stats = list(zip(*r.waiter_stats))
+    plot_pie_chart(args, trans_stats[0], trans_stats[1], "waiter_task")
+    # - wakers
+    trans_stats = list(zip(*r.waker_stats))
+    plot_pie_chart(args, trans_stats[0], trans_stats[1], "waker_task")
+    # - cs
+    trans_stats = list(zip(*r.wcw_cs_stats))
+    plot_pie_chart(args, trans_stats[0], trans_stats[1], "wcw_cs")
+    # - cs types
+    trans_stats = list(zip(*r.wtw_cst_stats))
+    plot_pie_chart(args, trans_stats[0], trans_stats[1], "wtw_cst")
 
 def get_stat(key, stat_names, stat_cols):
     for stat_name, stat in zip(stat_names, stat_cols):
