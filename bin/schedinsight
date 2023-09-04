@@ -1411,29 +1411,44 @@ def gen_waiter_waker_stat(args, results, md_f):
     r = results
 
     # generate the detailed data in CSV
-    configs = [("wcwn", r.wcw_csv),
-               ("wtwn", r.wtw_csv),
-               ("w_cwn", r.w_cwn_csv),
-               ("w_twn", r.w_twn_csv),
-               ("wc_wn", r.wc_wn_csv),
-               ("wt_wn", r.wt_wn_csv),
-               ("waiter_task", r.waiter_csv), 
-               ("waker_task", r.waker_csv),
-               ("wcw_cs", r.wcw_cs_csv), 
-               ("wtw_cst", r.wtw_cst_csv)]
-    for name, data in configs:
+    csv_configs = [("wcwn", r.wcw_csv, "Waker-callstack-waiter => count"),
+                   ("wtwn", r.wtw_csv, "Waker-callstack type-waiter => count"),
+                   ("w_cwn", r.w_cwn_csv, "Waker => callstack-waiter => count"),
+                   ("w_twn", r.w_twn_csv, "Waker => callstack type-wakter => count"),
+                   ("wc_wn", r.wc_wn_csv, "Waiter => callstack-waker => count"),
+                   ("wt_wn", r.wt_wn_csv, "Waiter => callstack type-waker => count"),
+                   ("waiter_task", r.waiter_csv, "Waiter count"), 
+                   ("waker_task", r.waker_csv, "Waker count"),
+                   ("wcw_cs", r.wcw_cs_csv, "Callstack count"), 
+                   ("wtw_cst", r.wtw_cst_csv, "Callstack type count")]
+    for name, data, desc in csv_configs:
         ofname = get_outfile_name(args, name, "csv")
         with open(ofname, "w") as f:
             gen_stat_in_csv(data, f)
 
     # plot overview data in pie charts
-    configs = [("waiter_task", r.waiter_csv.stats),
-               ("waker_task", r.waker_csv.stats),
-               ("wcw_cs", r.wcw_cs_csv.stats),
-               ("wtw_cst", r.wtw_cst_csv.stats)]
-    for name, data in configs:
+    svg_configs = [("waiter_task", r.waiter_csv.stats, "Distribution of waiters"),
+                   ("waker_task", r.waker_csv.stats, "Discribution of wakers"),
+                   ("wcw_cs", r.wcw_cs_csv.stats, "Distribution of waiting callstacks"),
+                   ("wtw_cst", r.wtw_cst_csv.stats, "Distribution of waiting callstack types")]
+    for name, data, desc in svg_configs:
         trans_stats = list(zip(*data))
         plot_pie_chart(args, trans_stats[0], trans_stats[1], name)
+
+    # generate markdown
+    print("### Waker-waiter analysis\n\n", file = md_f)
+    for name, data, desc in csv_configs:
+        ofname = get_outfile_name(args, name, "csv")
+        afil, rfil = get_res_path(args, ofname)
+        print("- [" + desc +" ](" + rfil + ")\n", file = md_f)
+    print("\n\n", file = md_f)
+
+    for name, data, desc in svg_configs:
+        ofname = get_outfile_name(args, name, "svg")
+        afil, rfil = get_res_path(args, ofname)
+        print("#### - " + desc +"\n", file = md_f)
+        print("![](" + rfil + ")\n", file = md_f)
+    print("\n\n", file = md_f)
 
 def get_stat(key, stat_names, stat_cols):
     for stat_name, stat in zip(stat_names, stat_cols):
