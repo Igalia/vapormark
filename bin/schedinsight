@@ -1349,7 +1349,7 @@ def gen_task_idle_stat_report(args, results, md_f):
     gen_md_title("%s" % args.prefix , md_f)
 
     print("### Logs \n", file = md_f)
-    afil, rfil = get_res_path(args, get_schedmon_log_name(args, "timehist_full"))
+    afil = os.path.abspath( get_schedmon_log_name(args, "timehist_full") )
     print("- file: %s" % afil, file = md_f)
 
     sz = os.stat(afil).st_size / (1024.0 * 1024.0)
