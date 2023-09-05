@@ -18,7 +18,7 @@ External Dependencies
       - [MangoHud](https://github.com/flightlessmango/MangoHud) for measuring FPS (frame per second) during a running game
       - `strace`, `trace-cmd`, `cpupower`, and `perf` for collecting processor states
   - analyzing the collected data
-      - `matplotlib` python library for generating graphs
+      - `matplotlib` and `graphviz` python library for generating graphs
   - generating a report
       - `pandoc` for generating a report in HTML format
   - for all phases
