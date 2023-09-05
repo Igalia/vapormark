@@ -934,8 +934,6 @@ def save_pickle(args, sched_events):
 def parse_schedmon_timehist(args, results):
     # get a log file name
     log_fil = get_schedmon_log_name(args, "timehist_full")
-    if os.path.isfile(log_fil) == False:
-        log_fil = get_schedmon_log_name(args, "timehist_short")
 
     # first try to load the pickled events
     sched_events = load_pickle(args, log_fil)
@@ -1306,7 +1304,7 @@ def plot_waker_waiter_graph(args, csv_data, plot_name, thr_cratio):
         print(e)
 
 def get_res_path(args, fname):
-    afil = os.path.join(args.logdir, fname)
+    afil = os.path.abspath(os.path.join(args.logdir, fname))
     rfil = os.path.relpath(afil, start = os.path.dirname(args.output))
     return afil, rfil
 
@@ -1350,8 +1348,18 @@ def gen_task_idle_stat_report(args, results, md_f):
     # configs
     gen_md_title("%s" % args.prefix , md_f)
 
-    print("### Task statistics\n\n", file = md_f)
+    print("### Logs \n", file = md_f)
+    afil, rfil = get_res_path(args, get_schedmon_log_name(args, "timehist_full"))
+    print("- file: %s" % afil, file = md_f)
 
+    sz = os.stat(afil).st_size / (1024.0 * 1024.0)
+    print("- size: %.2f MB" % sz, file = md_f)
+
+    mtime = datetime.datetime.fromtimestamp(os.stat(afil).st_mtime).strftime('%Y-%m-%d %H:%M')
+    print("- mtime: %s" % mtime, file = md_f)
+    print("\n\n", file = md_f)
+
+    print("## Task statistics\n\n", file = md_f)
     # links to raw data
     fname = get_outfile_name(args, "task_stat", "csv")
     afil, rfil = get_res_path(args, fname)
@@ -1393,9 +1401,9 @@ def gen_task_stat_corr(args, results, md_f):
         plot_corr_figs(args, cset.corrs, "task_stat_corr" + cset.name)
 
     # generate markdown
-    print("### Pearson correlation between task features\n\n", file = md_f)
+    print("## Pearson correlation between task features\n\n", file = md_f)
     for cset in results.corr_sets:
-        print("#### - %s\n" % cset.question, file = md_f)
+        print("### - %s\n" % cset.question, file = md_f)
         fig_name = get_outfile_name(args, "task_stat_corr" + cset.name, "svg")
         afil, rfil = get_res_path(args, fig_name)
         print("![](" + rfil + ")\n", file = md_f)
@@ -1432,7 +1440,7 @@ def gen_task_stat_over_time(args, results, md_f):
                                      "tsov_" + task_name_fssafe)
 
     # intergrate the results into the report
-    print("### Task's wait_time, sched_delay, and runtimes\n\n", file = md_f)
+    print("## Task's wait_time, sched_delay, and runtimes\n\n", file = md_f)
     for i in range(0, len(task_names), 6):
         gen_md_tbl_figs(args, task_names[i:i+6], "tsov_", True, 
                         md_f, trans_fn = get_fssafe_task_name)
@@ -1457,7 +1465,7 @@ def gen_callstack_stat(args, r, md_f):
     plot_pie_chart(args, name_list, cnt_list, "callstack_type_stat")
 
     # generate markdown
-    print("### Callstacks tiggered scheduling\n\n", file = md_f)
+    print("## Callstacks tiggered scheduling\n\n", file = md_f)
     ofname = get_outfile_name(args, "callstack_stat", "csv")
     afil, rfil = get_res_path(args, ofname)
     print("- [callstacks](" + rfil + ")", file = md_f)
@@ -1511,7 +1519,7 @@ def gen_waiter_waker_stat(args, results, md_f):
             break
 
     # generate markdown
-    print("### Waker-waiter analysis\n\n", file = md_f)
+    print("## Waker-waiter analysis\n\n", file = md_f)
     for name, data, desc in csv_configs:
         ofname = get_outfile_name(args, name, "csv")
         afil, rfil = get_res_path(args, ofname)
@@ -1521,7 +1529,7 @@ def gen_waiter_waker_stat(args, results, md_f):
     for name, data, desc in svg_configs:
         ofname = get_outfile_name(args, name, "svg")
         afil, rfil = get_res_path(args, ofname)
-        print("#### - " + desc +"\n", file = md_f)
+        print("### - " + desc +"\n", file = md_f)
         print("![](" + rfil + ")\n", file = md_f)
     print("\n\n", file = md_f)
 
@@ -1529,7 +1537,7 @@ def gen_waiter_waker_stat(args, results, md_f):
         ofname = get_outfile_name(args, "wtw_graph_%f_dot" % t, "svg")
         if os.path.isfile(ofname):
             afil, rfil = get_res_path(args, ofname)
-            print("#### - %.2f percentile of waker-waiter\n" % t, file = md_f)
+            print("### - %.2f percentile of waker-waiter\n" % t, file = md_f)
             print("![](" + rfil + ")\n", file = md_f)
     print("\n\n", file = md_f)
 
