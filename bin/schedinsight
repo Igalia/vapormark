@@ -14,8 +14,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import graphviz
 
-wcw_thrs = [5.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 
-            70.0, 80.0, 90.0, 95.0, 98.0, 99.0]
+wcw_thrs = [30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 95.0, 98.0, 99.0]
 
 def hash_rgb_from_str(s):
     h = zlib.crc32( bytes(s, 'utf-8') )
@@ -687,6 +686,17 @@ class pearson_corr:
         self.data_names = None
         self.pcc     = None
 
+class corr_set:
+    name = ""
+    question = ""
+    corrs = None
+
+    def __init__(self, name, question, corrs):
+        self.name = name
+        self.question = question
+        self.corrs = corrs
+
+
 class csv_data:
     names = None
     stats = None
@@ -701,7 +711,7 @@ class analysis_results:
     sched_events = None
 
     # pearson correlations
-    corrs = None
+    corr_sets = None
 
     # task & idle status
     task_csv = None
@@ -746,7 +756,7 @@ class analysis_results:
 
     def __init__(self):
         # pearson correlations
-        self.corrs = []
+        self.corr_sets = []
 
         # task & idle status
         self.task_csv = csv_data()
@@ -1176,7 +1186,10 @@ def plot_corr_figs(args, corrs, plot_name):
 
     # scatter plot
     for i, corr in enumerate(corrs):
-        ax = axs[i]
+        if len(corrs) > 1:
+            ax = axs[i]
+        else:
+            ax = axs
         colors = []
         for name in corr.data_names:
             colors.append( hash_rgb_from_str(name) )
@@ -1367,13 +1380,16 @@ def gen_task_idle_stat(args, r, md_f):
 
 def gen_task_stat_corr(args, results, md_f):
     # generate correlation graphs
-    plot_corr_figs(args, results.corrs, "task_stat_corr")
+    for cset in results.corr_sets:
+        plot_corr_figs(args, cset.corrs, "task_stat_corr" + cset.name)
 
     # generate markdown
     print("### Pearson correlation between task features\n\n", file = md_f)
-    fig_name = get_outfile_name(args, "task_stat_corr", "svg")
-    afil, rfil = get_res_path(args, fig_name)
-    print("![](" + rfil + ")", file = md_f)
+    for cset in results.corr_sets:
+        print("#### %s\n" % cset.question, file = md_f)
+        fig_name = get_outfile_name(args, "task_stat_corr" + cset.name, "svg")
+        afil, rfil = get_res_path(args, fig_name)
+        print("![](" + rfil + ")\n", file = md_f)
     print("\n\n", file = md_f)
 
 
@@ -1517,38 +1533,40 @@ def get_stat(key, stat_names, stat_cols):
 
 def analyze_stats_correlation(args, results):
     # list of stat-pairs
-    results.corrs = [
-            # Q. How userful is num_sched in predicting task's behavior?
-            pearson_corr("num_sched", "num_mig", "task_name"), 
-            pearson_corr("num_sched", "runtime_avg", "task_name"), 
-            #
-            # Q. How useful is the vruntime in predicting task's behavior?
-            pearson_corr("runtime_total", "num_sched", "task_name"),
-            pearson_corr("runtime_total", "runtime_avg", "task_name"),
-            # 
-            # Q. Is task's runtime stable?
-            pearson_corr("runtime_avg", "runtime_aad", "task_name"), 
-            #
-            # Q. Is task's wait time an useful indicator for something?
-            pearson_corr("num_sched", "wait_time_total", "task_name"), 
-            pearson_corr("runtime_avg", "wait_time_total", "task_name"), 
-            pearson_corr("num_sched", "wait_time_avg", "task_name"), 
-            pearson_corr("runtime_avg", "wait_time_avg", "task_name"), 
-            pearson_corr("wait_time_avg", "wait_time_aad", "task_name"), 
-            #
-            # Q. Can we predict scheding dealy?
-            pearson_corr("num_sched", "sched_delay_avg", "task_name"),
-            pearson_corr("runtime_avg", "sched_delay_avg", "task_name"),
-            pearson_corr("runtime_total", "sched_delay_avg", "task_name"),
+    results.corr_sets = [
+            corr_set("_num_sched",
+                     "How userful is num_sched in predicting task's behavior?",
+                     [pearson_corr("num_sched", "num_mig", "task_name"), 
+                      pearson_corr("num_sched", "runtime_avg", "task_name")]),
+            corr_set("_runtime_total",
+                     "How useful is the vruntime in predicting task's behavior?",
+                     [pearson_corr("runtime_total", "num_sched", "task_name"),
+                      pearson_corr("runtime_total", "runtime_avg", "task_name")]),
+            corr_set("_runtime_avg_aad",
+                     "Is task's runtime stable and predictable using average?",
+                     [pearson_corr("runtime_avg", "runtime_aad", "task_name")]),
+            corr_set("_wait_time",
+                     "Is task's wait time an useful indicator for something?",
+                     [pearson_corr("num_sched", "wait_time_total", "task_name"),
+                      pearson_corr("runtime_avg", "wait_time_total", "task_name"),
+                      pearson_corr("num_sched", "wait_time_avg", "task_name"), 
+                      pearson_corr("runtime_avg", "wait_time_avg", "task_name"),
+                      pearson_corr("wait_time_avg", "wait_time_aad", "task_name")]),
+            corr_set("_sched_delay",
+                     "Can we predict scheding delay?",
+                     [pearson_corr("num_sched", "sched_delay_avg", "task_name"),
+                      pearson_corr("runtime_avg", "sched_delay_avg", "task_name"),
+                      pearson_corr("runtime_total", "sched_delay_avg", "task_name")]),
             ]
 
     # calc pearson correlations
     stat_cols = transpose_2d_list(results.task_csv.stats)
-    for corr in results.corrs:
-        corr.x_data = get_stat(corr.x_label, results.task_csv.names, stat_cols)
-        corr.y_data = get_stat(corr.y_label, results.task_csv.names, stat_cols)
-        corr.data_names = get_stat(corr.data_label, results.task_csv.names, stat_cols)
-        corr.pcc = np.corrcoef(np.array(corr.x_data), np.array(corr.y_data))
+    for crset in results.corr_sets:
+        for c in crset.corrs:
+            c.x_data = get_stat(c.x_label, results.task_csv.names, stat_cols)
+            c.y_data = get_stat(c.y_label, results.task_csv.names, stat_cols)
+            c.data_names = get_stat(c.data_label, results.task_csv.names, stat_cols)
+            c.pcc = np.corrcoef(np.array(c.x_data), np.array(c.y_data))
 
 def analyze_callstack(args, r):
     ev_callstack.analyze_stat()
