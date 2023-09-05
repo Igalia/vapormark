@@ -243,12 +243,9 @@ class task_stat:
     # ev_mig stat
     migrated_num = 0
 
-    # TODO: sched reason
-    # - iowait
-    # - lock_wait
-    # - preemption timeout
-    # - poll/epoll
-    # - pipe read
+    # ev_awkae stat
+    wake_num = 0
+    wait_num = 0
 
     def __init__(self, task):
         self.task = task
@@ -272,6 +269,9 @@ class task_stat:
         self.sched_run_sum = 0.0
 
         self.migrated_num = 0
+
+        self.wake_num = 0
+        self.wait_num = 0
 
     def analyze_stat(self):
         # ev_sched or ev_idle?
@@ -979,14 +979,14 @@ def is_meaningful_task(args, task_stat):
 
 
 def analyze_task_idle_stat(args, r):
-    stat_names = ["task_name", "num_sched", "num_mig", # 0--2
+    stat_names = ["task_name", "num_sched", "num_mig", "num_wake", "num_wait", # 0--4
                   "wait_time_med", "wait_time_avg",
-                  "wait_time_aad", "wait_time_total", # 3--6
+                  "wait_time_aad", "wait_time_total", # 5--8
                   "sched_delay_med", "sched_delay_avg",
-                  "sched_delay_aad", "sched_delay_total", # 7-10
+                  "sched_delay_aad", "sched_delay_total", # 9--12
                   "runtime_med", "runtime_avg",
-                  "runtime_aad", "runtime_total", # 11-14
-                  "rank_nsched", "rank_nmig", "rank_runtime", "score", # 15-18
+                  "runtime_aad", "runtime_total", # 13--16
+                  "rank_nsched", "rank_nmig", "rank_runtime", "score", # 17--20
                   ]
 
     # per-task stats 
@@ -1002,7 +1002,7 @@ def analyze_task_idle_stat(args, r):
         if is_meaningful_task(args, s) == False:
             continue
 
-        t_info = [str(t), s.sched_num, s.migrated_num]
+        t_info = [str(t), s.sched_num, s.migrated_num, s.wake_num, s.wait_num]
         w_stat = [s.sched_wait_med, s.sched_wait_avg, s.sched_wait_aad, s.sched_wait_sum]
         d_stat = [s.sched_delay_med, s.sched_delay_avg, s.sched_delay_aad, s.sched_delay_sum]
         r_stat = [s.sched_run_med, s.sched_run_avg, s.sched_run_aad, s.sched_run_sum]
@@ -1018,23 +1018,23 @@ def analyze_task_idle_stat(args, r):
     # - by number of sched
     task_stats.sort(reverse = True, key = lambda x: x[1])
     for i, s in enumerate(task_stats):
-        s.append(i) # 15
+        s.append(i) # 17
     # - by number of migration
     task_stats.sort(reverse = True, key = lambda x: x[2])
     for i, s in enumerate(task_stats):
-        s.append(i) # 16
+        s.append(i) # 18
     # - by total runtime
-    task_stats.sort(reverse = True, key = lambda x: x[14])
+    task_stats.sort(reverse = True, key = lambda x: x[16])
     for i, s in enumerate(task_stats):
-        s.append(i) # 17
+        s.append(i) # 19
     # - score
     for s in task_stats:
-        ns, nm, rt = s[15], s[16], s[17]
+        ns, nm, rt = s[17], s[18], s[19]
         score = ns*ns + (rt*rt)/2 + (nm*nm)/8
-        s.append(score) #18
+        s.append(score) #20
 
     # soft by score
-    task_stats.sort(key = lambda x: x[18])
+    task_stats.sort(key = lambda x: x[20])
     r.task_csv.names = stat_names
     r.task_csv.formats = ["{0:^30}"] + ["{0:>14}"] * (len(r.task_csv.names) - 1)
     r.task_csv.stats = task_stats
@@ -1353,10 +1353,13 @@ def gen_task_idle_stat_report(args, results, md_f):
     print("### Task statistics\n\n", file = md_f)
 
     # links to raw data
-    print("- [task stats data](%s)" % 
-          get_outfile_name(args, "task_stat", "csv"), file = md_f)
-    print("- [idle stats data](%s)" % 
-          get_outfile_name(args, "idle_stat", "csv"), file = md_f)
+    fname = get_outfile_name(args, "task_stat", "csv")
+    afil, rfil = get_res_path(args, fname)
+    print("- [task stats data](%s)" % rfil, file = md_f)
+
+    fname = get_outfile_name(args, "idle_stat", "csv")
+    afil, rfil = get_res_path(args, fname)
+    print("- [idle stats data](%s)" % rfil, file = md_f)
     print("\n\n", file = md_f)
 
     # figs table
@@ -1386,7 +1389,7 @@ def gen_task_stat_corr(args, results, md_f):
     # generate markdown
     print("### Pearson correlation between task features\n\n", file = md_f)
     for cset in results.corr_sets:
-        print("#### %s\n" % cset.question, file = md_f)
+        print("#### - %s\n" % cset.question, file = md_f)
         fig_name = get_outfile_name(args, "task_stat_corr" + cset.name, "svg")
         afil, rfil = get_res_path(args, fig_name)
         print("![](" + rfil + ")\n", file = md_f)
@@ -1638,6 +1641,14 @@ def process_awake_event(r):
         # add a wake relationship
         task_waker_waiter.add_wcw(t_waker, waiter_cs, t_waiter)
 
+    # update task_stat for wake_num and wait_num
+    for tname, cnt in task_waker_waiter.get_waiter():
+        t = ev_task.find(tname)
+        t.task_stat.wait_num = cnt
+    for tname, cnt in task_waker_waiter.get_waker():
+        t = ev_task.find(tname)
+        t.task_stat.wake_num = cnt
+
 def append_ratio_n_cratio(stats):
     # "waker_task", "waiter_callstack", "waiter_task"
     # "num_wake", "wake_ratio", "wake_cratio"
@@ -1713,7 +1724,7 @@ def analyze_waker_waiter(args, r):
     # - waiter                         => count
     stats = list(task_waker_waiter.get_waiter())
     r.waiter_csv.stats = append_ratio_n_cratio(stats)
-    r.waiter_csv.names = ["waiter_task", "num_wake", "wake_ratio", "wake_cratio"]
+    r.waiter_csv.names = ["waiter_task", "num_wait", "wake_ratio", "wake_cratio"]
     r.waiter_csv.formats = ["{0:^30}", "{0:>14}", "{0:>14}", "{0:>14}"]
 
     # get waker stats
@@ -1743,11 +1754,15 @@ def parse_and_analyze_event(args):
     parse_schedmon_timehist(args, results)
 
     # then analyze it
+    # 1. 
+    analyze_waker_waiter(args, results)
+    # 2.
     analyze_task_idle_stat(args, results)
+    # 3. 
     analyze_stats_correlation(args, results)
+    # 4.
     analyze_callstack(args, results)
     analyze_callstack_type(args, results)
-    analyze_waker_waiter(args, results)
 
     return results
 
