@@ -58,9 +58,9 @@ def wait_for_schedmon(args):
     sh_cmd = "perf sched timehist -SMVwng -i %s >  %s" % (raw_log, log)
     sh_cmds.append(sh_cmd)
     # - timehist (short)
-    log = get_log_name(args, "timehist_short")
-    sh_cmd = "perf sched timehist -Sg     -i %s >  %s" % (raw_log, log)
-    sh_cmds.append(sh_cmd)
+    # log = get_log_name(args, "timehist_short")
+    # sh_cmd = "perf sched timehist -Sg     -i %s >  %s" % (raw_log, log)
+    # sh_cmds.append(sh_cmd)
 
     # launch background monitors
     for sh_cmd in sh_cmds:
