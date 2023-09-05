@@ -669,22 +669,49 @@ class ev_awake:
                           "=>", str(self.next_task)])
 
 class pearson_corr:
-    x_label = ""
-    y_label = ""
     data_label = ""
+    data_names = None
+
+    x_label = None
+    y_label = None
     x_data  = None
     y_data  = None
-    data_names = None
-    pcc     = None
+    pcc     = None      # non-weighted correlation coefficient
 
-    def __init__(self, x, y, d):
+    w_label = None
+    w_data = None
+    wcc      = None     # weighted correlation coefficient
+
+    def __init__(self, x, y, d, w = None):
+        self.data_label = d
+        self.data_names = None
+
         self.x_label = x
         self.y_label = y
-        self.data_label = d
         self.x_data  = None
         self.y_data  = None
-        self.data_names = None
         self.pcc     = None
+
+        self.w_label = w
+        self.w_data = None
+        self.wcc = None
+
+    def calc_pcc(self):
+        # https://en.wikipedia.org/wiki/Pearson_correlation_coefficient
+        self.pcc = np.corrcoef(np.array(self.x_data), np.array(self.y_data))[0,1]
+
+    def calc_wcc(self):
+        # https://en.wikipedia.org/wiki/Pearson_correlation_coefficient#Weighted_correlation_coefficient
+        def w_m(x, w):
+            return np.sum(x * w) / np.sum(w)
+
+        def w_cov(x, y, w):
+            return np.sum(w * (x - w_m(x, w)) * (y - w_m(y, w))) / np.sum(w)
+
+        x = np.array(self.x_data)
+        y = np.array(self.y_data)
+        w = np.array(self.w_data)
+        self.wcc = w_cov(x, y, w) / np.sqrt(w_cov(x, x, w) * w_cov(y, y, w))
 
 class corr_set:
     name = ""
@@ -1193,7 +1220,8 @@ def plot_corr_figs(args, corrs, plot_name):
             colors.append( hash_rgb_from_str(name) )
         ax.scatter(corr.x_data, corr.y_data, c=colors, marker="x")
         ax.set(xlabel=corr.x_label, ylabel=corr.y_label)
-        ax.title.set_text("Correlation = " + "{:.2f}".format(corr.pcc[0,1]))
+        ax.title.set_text("pcc=" + "{:.2f}".format(corr.pcc) + " " + \
+                          "wcc=" + "{:.2f}".format(corr.wcc))
 
     # - save to the filewineserver
     fig_name = get_outfile_name(args, plot_name, "svg")
@@ -1275,6 +1303,7 @@ def plot_waker_waiter_graph(args, csv_data, plot_name, thr_cratio):
     g = graphviz.Digraph(comment="thr_cratio = %f" % thr_cratio)
 
     # csv data: node1, edge, node2, num, ratio, cratio
+    #           waker        waiter
     #           [0,    1,    2,     3,   4,     5    ]
     node_set = set()
     # - add edges 
@@ -1542,44 +1571,44 @@ def gen_waiter_waker_stat(args, results, md_f):
     print("\n\n", file = md_f)
 
 
-def get_stat(key, stat_names, stat_cols):
-    for stat_name, stat in zip(stat_names, stat_cols):
-        if stat_name == key:
-            return stat
-    return None
-
 def analyze_stats_correlation(args, results):
+    def get_stat(key, stat_names, stat_cols):
+        for stat_name, stat in zip(stat_names, stat_cols):
+            if stat_name == key:
+                return stat
+        return None
+
     # list of stat-pairs
     results.corr_sets = [
             corr_set("_num_sched",
                      "How userful is num_sched in predicting task's behavior?",
-                     [pearson_corr("num_sched", "num_mig", "task_name"), 
-                      pearson_corr("num_sched", "runtime_avg", "task_name")]),
+                     [pearson_corr("num_sched", "num_mig", "task_name", "num_sched"), 
+                      pearson_corr("num_sched", "runtime_avg", "task_name", "num_sched")]),
             corr_set("_runtime_total",
                      "How useful is the vruntime in predicting task's behavior?",
-                     [pearson_corr("runtime_total", "num_sched", "task_name"),
-                      pearson_corr("runtime_total", "runtime_avg", "task_name")]),
+                     [pearson_corr("runtime_total", "num_sched", "task_name", "num_sched"),
+                      pearson_corr("runtime_total", "runtime_avg", "task_name", "num_sched")]),
             corr_set("_wake_wait",
                      "How useful is the num_wake/wait in predicting task's behavior?",
-                     [pearson_corr("num_wake", "num_sched", "task_name"),
-                      pearson_corr("num_wait", "num_sched", "task_name"),
-                      pearson_corr("num_wake", "runtime_avg", "task_name"),
-                      pearson_corr("num_wait", "runtime_avg", "task_name")]),
+                     [pearson_corr("num_wake", "num_sched", "task_name", "num_sched"),
+                      pearson_corr("num_wait", "num_sched", "task_name", "num_sched"),
+                      pearson_corr("num_wake", "runtime_avg", "task_name", "num_sched"),
+                      pearson_corr("num_wait", "runtime_avg", "task_name", "num_sched")]),
             corr_set("_runtime_avg_aad",
                      "Is task's runtime stable and predictable using average?",
-                     [pearson_corr("runtime_avg", "runtime_aad", "task_name")]),
+                     [pearson_corr("runtime_avg", "runtime_aad", "task_name", "num_sched")]),
             corr_set("_wait_time",
                      "Is task's wait time an useful indicator for something?",
-                     [pearson_corr("num_sched", "wait_time_total", "task_name"),
-                      pearson_corr("runtime_avg", "wait_time_total", "task_name"),
-                      pearson_corr("num_sched", "wait_time_avg", "task_name"), 
-                      pearson_corr("runtime_avg", "wait_time_avg", "task_name"),
-                      pearson_corr("wait_time_avg", "wait_time_aad", "task_name")]),
+                     [pearson_corr("num_sched", "wait_time_total", "task_name", "num_sched"),
+                      pearson_corr("runtime_avg", "wait_time_total", "task_name", "num_sched"),
+                      pearson_corr("num_sched", "wait_time_avg", "task_name", "num_sched"), 
+                      pearson_corr("runtime_avg", "wait_time_avg", "task_name", "num_sched"),
+                      pearson_corr("wait_time_avg", "wait_time_aad", "task_name", "num_sched")]),
             corr_set("_sched_delay",
                      "Can we predict scheding delay?",
-                     [pearson_corr("num_sched", "sched_delay_avg", "task_name"),
-                      pearson_corr("runtime_avg", "sched_delay_avg", "task_name"),
-                      pearson_corr("runtime_total", "sched_delay_avg", "task_name")]),
+                     [pearson_corr("num_sched", "sched_delay_avg", "task_name", "num_sched"),
+                      pearson_corr("runtime_avg", "sched_delay_avg", "task_name", "num_sched"),
+                      pearson_corr("runtime_total", "sched_delay_avg", "task_name", "num_sched")]),
             ]
 
     # calc pearson correlations
@@ -1589,7 +1618,9 @@ def analyze_stats_correlation(args, results):
             c.x_data = get_stat(c.x_label, results.task_csv.names, stat_cols)
             c.y_data = get_stat(c.y_label, results.task_csv.names, stat_cols)
             c.data_names = get_stat(c.data_label, results.task_csv.names, stat_cols)
-            c.pcc = np.corrcoef(np.array(c.x_data), np.array(c.y_data))
+            c.w_data = get_stat(c.w_label, results.task_csv.names, stat_cols)
+            c.calc_pcc()
+            c.calc_wcc()
 
 def analyze_callstack(args, r):
     ev_callstack.analyze_stat()
