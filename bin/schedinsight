@@ -1304,7 +1304,7 @@ def plot_waker_waiter_graph(args, csv_data, plot_name, thr_cratio):
         print(e)
 
 def get_res_path(args, fname):
-    afil = os.path.abspath(os.path.join(args.logdir, fname))
+    afil = os.path.abspath(fname)
     rfil = os.path.relpath(afil, start = os.path.dirname(args.output))
     return afil, rfil
 
