@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import graphviz
 
 wcw_thrs = [5.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 
-            70.0, 80.0, 90.0, 95.0, 98.0, 99.0, 100.0]
+            70.0, 80.0, 90.0, 95.0, 98.0, 99.0]
 
 def hash_rgb_from_str(s):
     h = zlib.crc32( bytes(s, 'utf-8') )
@@ -876,8 +876,8 @@ def skip_column_header(f):
     f.readline()
 
 def get_schedmon_log_name(args, kind):
-    log = os.path.join(args.outdir,
-                       args.log + "-schedmon-" + kind+ "__.log")
+    log = os.path.join(args.logdir,
+                       args.prefix + "-schedmon-" + kind+ "__.log")
     return log
 
 def parse_sched_events(f):
@@ -1034,13 +1034,13 @@ def analyze_task_idle_stat(args, r):
     r.idle_csv.stats = idle_stats
 
 def get_outfile_name(args, kind, suffix):
-    ofname = os.path.join(args.outdir, args.log + 
+    ofname = os.path.join(args.logdir, args.prefix + 
                           "-schedinsight-" + kind + "." + suffix)
     return ofname
 
 def get_outfile_name_x(args, kind, suffix):
-    odir = args.outdir
-    fname = args.log + "-schedinsight-" + kind 
+    odir = args.logdir
+    fname = args.prefix + "-schedinsight-" + kind 
     return odir, fname, suffix
 
 def reset_plot():
@@ -1287,11 +1287,14 @@ def plot_waker_waiter_graph(args, csv_data, plot_name, thr_cratio):
     g.format='svg'
     g.filename = fname
     g.directory = odir
-    g.render(view=False)
+    try:
+        g.render(view=False)
+    except Exception as e:
+        print(e)
 
 def get_res_path(args, fname):
-    afil = os.path.join(args.outdir, fname)
-    rfil = os.path.relpath(afil, start = args.outdir)
+    afil = os.path.join(args.logdir, fname)
+    rfil = os.path.relpath(afil, start = os.path.dirname(args.output))
     return afil, rfil
 
 def gen_md_title(title, f):
@@ -1332,7 +1335,7 @@ def gen_md_tbl_figs(args, col_names, fea, header, f, trans_fn = noop):
 
 def gen_task_idle_stat_report(args, results, md_f):
     # configs
-    gen_md_title("%s" % args.log, md_f)
+    gen_md_title("%s" % args.prefix , md_f)
 
     print("### Task statistics\n\n", file = md_f)
 
@@ -1716,46 +1719,23 @@ def analyze_waker_waiter(args, r):
     r.wtw_cst_csv.names = ["callstack_type", "num_wake", "wake_ratio", "wake_cratio"]
     r.wtw_cst_csv.formats = ["{0:^50}", "{0:>14}", "{0:>14}", "{0:>14}"]
 
-def analyze_events(args, results):
+def parse_and_analyze_event(args):
+    # parse the log
+    results = analysis_results()
+    parse_schedmon_timehist(args, results)
+
+    # then analyze it
     analyze_task_idle_stat(args, results)
     analyze_stats_correlation(args, results)
     analyze_callstack(args, results)
     analyze_callstack_type(args, results)
     analyze_waker_waiter(args, results)
 
-def get_cmd_options(argv):
-    parser = argparse.ArgumentParser(
-            prog = "schedinsight",
-            description = "Report the detailed analysis of scheduliing activities collected by `perf sched record`",)
-    parser.add_argument('-o', '--outdir', action='store', required=True,
-                        help='output directory') 
-    parser.add_argument('-l', '--log', action='store', required=True,
-                        help='log file prefix') 
-    parser.add_argument('-q', '--quiet', action='store_true',
-                        help='do not print result to stdout' ) 
-    parser.add_argument('-p', '--pickle', action='store_true',
-                        help='use pickle whenever possible' ) 
-    parser.add_argument('-s', '--minsched', action='store', type=int, default=100,
-                        help='set the minimum number of schedules for task analysis' ) 
-    parser.add_argument('-t', '--timelimit', action='store', type=int, default=400,
-                        help='time limit to draw a graph in seconds' ) 
-    args = parser.parse_args(argv)
-    return args
+    return results
 
-if __name__ == "__main__":
-    # extend recursion limit for huge logs
-    sys.setrecursionlimit(100000)
-
-    # get options
-    args = get_cmd_options(sys.argv[1:])
-
-    # parse and analyze the log
-    results = analysis_results()
-    parse_schedmon_timehist(args, results)
-    analyze_events(args, results)
-
+def gen_report(args, results):
     # generate a report in markdow
-    md_fname = get_outfile_name(args, "report", "md")
+    md_fname = args.output + ".md"
     with open(md_fname, "w") as md_f:
         gen_task_idle_stat(args, results, md_f)
         gen_task_stat_corr(args, results, md_f)
@@ -1764,8 +1744,37 @@ if __name__ == "__main__":
         gen_waiter_waker_stat(args, results, md_f)
 
     # convert the markdown to html
-    html_fname = get_outfile_name(args, "report", "html")
+    html_fname = args.output + ".html"
     cmd = "pandoc --standalone --toc %s -o %s" % (md_fname, html_fname)
     p = subprocess.Popen(cmd, shell=True, stdout=None, stderr=None)
     p.wait()
+
+def get_cmd_options(argv):
+    parser = argparse.ArgumentParser(
+            prog = "schedinsight",
+            description = "Report the detailed analysis of scheduliing activities collected by `perf sched record`",)
+    parser.add_argument('-l', '--logdir', action='store', required=True,
+                        help='a log directory') 
+    parser.add_argument('-p', '--prefix', action='store', required=True,
+                        help='log file prefix') 
+    parser.add_argument('-o', '--output', action='store', required=True,
+                        help='a target report file name in markdown format') 
+    parser.add_argument('-k', '--pickle', action='store_true',
+                        help='use pickle whenever possible' ) 
+    parser.add_argument('-s', '--minsched', action='store', type=int, default=100,
+                        help='set the minimum number of schedules for task analysis' ) 
+    parser.add_argument('-t', '--timelimit', action='store', type=int, default=400,
+                        help='time limit to draw a graph in seconds' ) 
+    args = parser.parse_args(argv)
+
+    return args
+
+if __name__ == "__main__":
+    sys.setrecursionlimit(100000)    # extend recursion limit for huge logs
+
+    args = get_cmd_options(sys.argv[1:])
+
+    results = parse_and_analyze_event(args)
+    gen_report(args, results)
+
 
