@@ -10,7 +10,6 @@ import argparse
 dbg_prt = False
 cur_dir = os.path.dirname(__file__)
 out_dir = None
-log_dir = None
 
 def print_log(msg):
     BLUE = '\033[94m'
