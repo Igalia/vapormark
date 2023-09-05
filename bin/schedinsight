@@ -1363,7 +1363,13 @@ def gen_task_idle_stat_report(args, results, md_f):
     print("\n\n", file = md_f)
 
     # figs table
-    gen_md_tbl_figs(args, results.task_csv.names[1:-4], "task_dist_", True, md_f)
+    mx = len(results.task_csv.names[0:-4])
+    for i in range(1, len(results.task_csv.names[0:-4]), 8):
+        i_next = min(i+8, mx)
+        gen_md_tbl_figs(args, results.task_csv.names[i:i_next], 
+                        "task_dist_", True, md_f)
+        print("\n\n", file = md_f)
+    print("\n\n", file = md_f)
 
 def gen_task_idle_stat(args, r, md_f):
     # generate CSV data
@@ -1427,8 +1433,8 @@ def gen_task_stat_over_time(args, results, md_f):
 
     # intergrate the results into the report
     print("### Task's wait_time, sched_delay, and runtimes\n\n", file = md_f)
-    for i in range(0, len(task_names), 10):
-        gen_md_tbl_figs(args, task_names[i:i+10], "tsov_", True, 
+    for i in range(0, len(task_names), 6):
+        gen_md_tbl_figs(args, task_names[i:i+6], "tsov_", True, 
                         md_f, trans_fn = get_fssafe_task_name)
         print("\n\n", file = md_f)
     print("\n\n", file = md_f)
