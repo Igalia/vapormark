@@ -737,12 +737,16 @@ class csv_data:
 class analysis_results:
     sched_events = None
 
+    # system-wide task and idle stats
+    sw_task_stat = None
+    sw_task_csv = None
+    sw_idle_csv = None
+
     # pearson correlations
     corr_sets = None
 
-    # task & idle status using per-task/idle average
+    # task status using per-task average
     task_csv = None
-    idle_csv = None
 
     # callstack 
     cs_csv = None
@@ -785,9 +789,13 @@ class analysis_results:
         # pearson correlations
         self.corr_sets = []
 
-        # task & idle status
+        # system-wide task and idle stat
+        self.sw_task_stat = ev_task("system-wide task info", 0, 0).task_stat
+        self.sw_task_csv = csv_data()
+        self.sw_idle_csv = csv_data()
+
+        # task status using per-task average
         self.task_csv = csv_data()
-        self.idle_csv = csv_data()
         # callstack 
         self.cs_csv = csv_data()
         # callstack types
@@ -812,6 +820,40 @@ class analysis_results:
         self.wcw_cs_csv = csv_data()
         # cst stats
         self.wtw_cst_csv = csv_data()
+
+    def aggregate_system_wide_task_stat(self):
+        sn, mn, w1n, w2n = 0, 0, 0, 0
+        w, d, r = [], [], []
+        for t in ev_task.task_dict.values():
+            sn = sn + t.task_stat.sched_num
+            mn = mn + t.task_stat.migrated_num
+            w1n = w1n + t.task_stat.wake_num
+            w2n = w2n + t.task_stat.wait_num
+
+            w = w + t.task_stat.sched_waits
+            d = d + t.task_stat.sched_delays
+            r = r + t.task_stat.sched_runs
+
+        self.sw_task_stat.sched_num = sn
+        self.sw_task_stat.migrated_num = mn
+        self.sw_task_stat.wake_num = w1n
+        self.sw_task_stat.wait_num = w2n
+
+        self.sw_task_stat.sched_waits = w
+        self.sw_task_stat.sched_wait_med = median(w)
+        self.sw_task_stat.sched_wait_avg = average(w)
+        self.sw_task_stat.sched_wait_aad = aad(w, self.sw_task_stat.sched_wait_avg)
+        self.sw_task_stat.sched_wait_sum = sum(w)
+
+        self.sw_task_stat.sched_delays = d
+        self.sw_task_stat.sched_delay_avg = average(d)
+        self.sw_task_stat.sched_delay_aad = aad(d, self.sw_task_stat.sched_delay_avg)
+        self.sw_task_stat.sched_delay_sum = sum(d)
+
+        self.sw_task_stat.sched_runs = r
+        self.sw_task_stat.sched_run_avg = average(r)
+        self.sw_task_stat.sched_run_aad = aad(r, self.sw_task_stat.sched_run_avg)
+        self.sw_task_stat.sched_run_sum = sum(r)
 
 class pickled_jar:
     task_dict = None
@@ -1004,8 +1046,18 @@ def is_meaningful_task(args, task_stat):
 
 
 def analyze_task_idle_stat(args, r):
+    def convert_task_stat_to_csv_stat(s):
+        t_info = [str(s.task), s.sched_num, s.migrated_num, s.wake_num, s.wait_num]
+        w_stat = [s.sched_wait_med, s.sched_wait_avg, s.sched_wait_aad, s.sched_wait_sum]
+        d_stat = [s.sched_delay_med, s.sched_delay_avg, s.sched_delay_aad, s.sched_delay_sum]
+        r_stat = [s.sched_run_med, s.sched_run_avg, s.sched_run_aad, s.sched_run_sum]
+
+        return t_info + w_stat + d_stat + r_stat
+
     # per-task stats 
     ev_task.analyze_stat()
+    # system-wide task/idle stat
+    r.aggregate_system_wide_task_stat()
 
     # collect task/idle stats using per-task average
     stat_names = ["task_name", "num_sched", "num_mig", "num_wake", "num_wait", # 0--4
@@ -1026,12 +1078,7 @@ def analyze_task_idle_stat(args, r):
         if is_meaningful_task(args, s) == False:
             continue
 
-        t_info = [str(t), s.sched_num, s.migrated_num, s.wake_num, s.wait_num]
-        w_stat = [s.sched_wait_med, s.sched_wait_avg, s.sched_wait_aad, s.sched_wait_sum]
-        d_stat = [s.sched_delay_med, s.sched_delay_avg, s.sched_delay_aad, s.sched_delay_sum]
-        r_stat = [s.sched_run_med, s.sched_run_avg, s.sched_run_aad, s.sched_run_sum]
-
-        stat = t_info + w_stat + d_stat + r_stat
+        stat = convert_task_stat_to_csv_stat(s)
 
         if t.is_idle():
             idle_stats.append(stat + [0, 0, 0, 0])
@@ -1063,9 +1110,15 @@ def analyze_task_idle_stat(args, r):
     r.task_csv.formats = ["{0:^30}"] + ["{0:>14}"] * (len(r.task_csv.names) - 1)
     r.task_csv.stats = task_stats
 
-    r.idle_csv.names = stat_names
-    r.idle_csv.formats = ["{0:^30}"] + ["{0:>14}"] * (len(r.task_csv.names) - 1)
-    r.idle_csv.stats = idle_stats
+    r.sw_idle_csv.names = stat_names
+    r.sw_idle_csv.formats = ["{0:^30}"] + ["{0:>14}"] * (len(r.sw_idle_csv.names) - 1)
+    r.sw_idle_csv.stats = idle_stats
+
+    # system-wide task info
+    r.sw_task_csv.names = stat_names
+    r.sw_task_csv.formats = ["{0:^30}"] + ["{0:>14}"] * (len(r.sw_task_csv.names) - 1)
+    r.sw_task_csv.stats = [ convert_task_stat_to_csv_stat(r.sw_task_stat) ]
+
 
 def get_outfile_name(args, kind, suffix):
     ofname = os.path.join(args.logdir, args.prefix + 
@@ -1235,10 +1288,10 @@ def plot_task_dist_figs(args, stat_names, task_stats):
     for name, stat in zip(stat_names[1:-4], stat_cols[1:-4]):
         plot_dist_fig(args, "task_dist_" + name, sorted(stat), name, "", "")
 
-def plot_per_task_stat_over_time(args, ts, title, plot_name):
+def plot_per_task_stat_over_time(args, ts, title, plot_name, x_size = 3, y_size = 14):
     # prepare canvas
     reset_plot()
-    fig, axs = plt.subplots(nrows=6, ncols=1, figsize=(3, 6.5), tight_layout=True)
+    fig, axs = plt.subplots(nrows=12, ncols=1, figsize=(x_size, y_size), tight_layout=True)
 
     def plot_filled_line(ax, data, c, y_label):
         l = len(data)
@@ -1246,6 +1299,19 @@ def plot_per_task_stat_over_time(args, ts, title, plot_name):
         ax.set_ylabel(y_label)
         ax.tick_params(left = True, right = False, labelleft = True, 
                        labelbottom = False, bottom = False)
+
+    def plot_filled_violin(ax, data, c, y_label):
+        l = len(data)
+        violin = ax.violinplot([data], showmeans=True,  quantiles=[0.1, 0.5, 0.9])
+        violin['bodies'][0].set_facecolor(c)
+        violin['cmeans'].set_edgecolor('red')
+        ax.set_ylabel(y_label)
+
+    def plot_filled_histogram(ax, data, c, y_label):
+        ax.hist(data, bins = 30, color=c, ec=c)
+        max_hist = len(data)/3
+        ax.set_ylim(bottom = 0, top = max_hist)
+        ax.set_ylabel(y_label)
 
     # time serises of wait time, sched delay, and runtimes
     plot_filled_line(axs[0], ts.sched_waits, 
@@ -1255,7 +1321,7 @@ def plot_per_task_stat_over_time(args, ts, title, plot_name):
     plot_filled_line(axs[2], ts.sched_runs, 
                      ts.task.color, "runtime:ts")
 
-    # time serises of wait time, sched delay, and runtimes
+    # sorted distribution of wait time, sched delay, and runtimes
     plot_filled_line(axs[3], sorted(ts.sched_waits.copy()), 
                      ts.task.color, "wait_time:dist")
     plot_filled_line(axs[4], sorted(ts.sched_delays.copy()), 
@@ -1268,6 +1334,22 @@ def plot_per_task_stat_over_time(args, ts, title, plot_name):
     axs[0].tick_params(labeltop = True, top = True)
     axs[5].tick_params(labelbottom = True, bottom = True)
     plt.subplots_adjust(hspace = 0)
+
+    # violin plot for wait time, sched delay, and runtimes
+    plot_filled_violin(axs[6], ts.sched_waits, 
+                       ts.task.color, "wait_time")
+    plot_filled_violin(axs[7], ts.sched_delays, 
+                       ts.task.color, "sched_delay")
+    plot_filled_violin(axs[8], ts.sched_runs, 
+                       ts.task.color, "runtime")
+
+    # histogram for wait time, sched delay, and runtimes
+    plot_filled_histogram(axs[9], ts.sched_waits, 
+                          ts.task.color, "wait_time")
+    plot_filled_histogram(axs[10], ts.sched_delays, 
+                          ts.task.color, "sched_delay")
+    plot_filled_histogram(axs[11], ts.sched_runs, 
+                          ts.task.color, "runtime")
 
     # save to the file
     fig_name = get_outfile_name(args, plot_name, "svg")
@@ -1389,16 +1471,22 @@ def gen_config(args, md_f):
 
 
 def gen_task_idle_stat_report(args, results, md_f):
+    print("## System-wide task and idle statistics\n\n", file = md_f)
+    fname = get_outfile_name(args, "sw_task_stat", "csv")
+    afil, rfil = get_res_path(args, fname)
+    print("- [Task stats data](%s)" % rfil, file = md_f)
+    print("\n\n", file = md_f)
+
+    fname = get_outfile_name(args, "sw_idle_stat", "csv")
+    afil, rfil = get_res_path(args, fname)
+    print("- [idle stats data](%s)" % rfil, file = md_f)
+    print("\n\n", file = md_f)
+
     print("## Task statistics using per-task average\n\n", file = md_f)
     # links to raw data
     fname = get_outfile_name(args, "task_stat", "csv")
     afil, rfil = get_res_path(args, fname)
     print("- [task stats data](%s)" % rfil, file = md_f)
-
-    fname = get_outfile_name(args, "idle_stat", "csv")
-    afil, rfil = get_res_path(args, fname)
-    print("- [idle stats data](%s)" % rfil, file = md_f)
-    print("\n\n", file = md_f)
 
     # figs table
     mx = len(results.task_csv.names[0:-4])
@@ -1415,12 +1503,18 @@ def gen_task_idle_stat(args, r, md_f):
     with open(ofname, "w") as f:
         gen_stat_in_csv(r.task_csv, f)
 
-    ofname = get_outfile_name(args, "idle_stat", "csv")
+    ofname = get_outfile_name(args, "sw_task_stat", "csv")
     with open(ofname, "w") as f:
-        gen_stat_in_csv(r.idle_csv, f)
+        gen_stat_in_csv(r.sw_task_csv, f)
+
+    ofname = get_outfile_name(args, "sw_idle_stat", "csv")
+    with open(ofname, "w") as f:
+        gen_stat_in_csv(r.sw_idle_csv, f)
 
     # generate distribution graphs 
     plot_task_dist_figs(args, r.task_csv.names, r.task_csv.stats)
+    plot_task_dist_figs(args, r.sw_task_csv.names, r.sw_task_csv.stats)
+    plot_task_dist_figs(args, r.sw_idle_csv.names, r.sw_idle_csv.stats)
 
     # generate markdown
     gen_task_idle_stat_report(args, r, md_f)
