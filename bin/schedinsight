@@ -740,6 +740,8 @@ class analysis_results:
     # system-wide task and idle stats
     sw_task_stat = None
     sw_task_csv = None
+
+    sw_idle_stat = None
     sw_idle_csv = None
 
     # pearson correlations
@@ -792,6 +794,8 @@ class analysis_results:
         # system-wide task and idle stat
         self.sw_task_stat = ev_task("system-wide task info", 0, 0).task_stat
         self.sw_task_csv = csv_data()
+
+        self.sw_idle_stat = None
         self.sw_idle_csv = csv_data()
 
         # task status using per-task average
@@ -822,6 +826,7 @@ class analysis_results:
         self.wtw_cst_csv = csv_data()
 
     def aggregate_system_wide_task_stat(self):
+        # task stat
         sn, mn, w1n, w2n = 0, 0, 0, 0
         w, d, r = [], [], []
         for t in ev_task.task_dict.values():
@@ -854,6 +859,10 @@ class analysis_results:
         self.sw_task_stat.sched_run_avg = average(r)
         self.sw_task_stat.sched_run_aad = aad(r, self.sw_task_stat.sched_run_avg)
         self.sw_task_stat.sched_run_sum = sum(r)
+
+        # idle stat
+        self.sw_idle_stat = ev_task.find(ev_task.idle_task_name).task_stat
+
 
 class pickled_jar:
     task_dict = None
@@ -1333,7 +1342,6 @@ def plot_per_task_stat_over_time(args, ts, title, plot_name, x_size = 3, y_size 
     axs[0].set_title(title)
     axs[0].tick_params(labeltop = True, top = True)
     axs[5].tick_params(labelbottom = True, bottom = True)
-    plt.subplots_adjust(hspace = 0)
 
     # violin plot for wait time, sched delay, and runtimes
     plot_filled_violin(axs[6], ts.sched_waits, 
@@ -1350,6 +1358,8 @@ def plot_per_task_stat_over_time(args, ts, title, plot_name, x_size = 3, y_size 
                           ts.task.color, "sched_delay")
     plot_filled_histogram(axs[11], ts.sched_runs, 
                           ts.task.color, "runtime")
+
+    plt.subplots_adjust(hspace = 0)
 
     # save to the file
     fig_name = get_outfile_name(args, plot_name, "svg")
@@ -1474,19 +1484,27 @@ def gen_task_idle_stat_report(args, results, md_f):
     print("## System-wide task and idle statistics\n\n", file = md_f)
     fname = get_outfile_name(args, "sw_task_stat", "csv")
     afil, rfil = get_res_path(args, fname)
-    print("- [Task stats data](%s)" % rfil, file = md_f)
+    print("- [System-wide task stats data](%s)\n" % rfil, file = md_f)
+
+    fname = get_outfile_name(args, "tsov_sw_task_stat", "svg")
+    afil, rfil = get_res_path(args, fname)
+    print("![](" + rfil + ")\n", file = md_f)
     print("\n\n", file = md_f)
 
     fname = get_outfile_name(args, "sw_idle_stat", "csv")
     afil, rfil = get_res_path(args, fname)
-    print("- [idle stats data](%s)" % rfil, file = md_f)
+    print("- [System-wide idle stats data](%s)\n" % rfil, file = md_f)
+
+    fname = get_outfile_name(args, "tsov_sw_idle_stat", "svg")
+    afil, rfil = get_res_path(args, fname)
+    print("![](" + rfil + ")\n", file = md_f)
     print("\n\n", file = md_f)
 
     print("## Task statistics using per-task average\n\n", file = md_f)
     # links to raw data
     fname = get_outfile_name(args, "task_stat", "csv")
     afil, rfil = get_res_path(args, fname)
-    print("- [task stats data](%s)" % rfil, file = md_f)
+    print("- [task stats data](%s)\n" % rfil, file = md_f)
 
     # figs table
     mx = len(results.task_csv.names[0:-4])
@@ -1511,10 +1529,14 @@ def gen_task_idle_stat(args, r, md_f):
     with open(ofname, "w") as f:
         gen_stat_in_csv(r.sw_idle_csv, f)
 
-    # generate distribution graphs 
+    # generate distribution graphs for all tasks
     plot_task_dist_figs(args, r.task_csv.names, r.task_csv.stats)
-    plot_task_dist_figs(args, r.sw_task_csv.names, r.sw_task_csv.stats)
-    plot_task_dist_figs(args, r.sw_idle_csv.names, r.sw_idle_csv.stats)
+
+    # generate tsov graphs for system-wide task and idle stat
+    plot_per_task_stat_over_time(args, r.sw_task_stat, "sw_task_stat", 
+                                 "tsov_sw_task_stat", x_size = 8, y_size = 14)
+    plot_per_task_stat_over_time(args, r.sw_idle_stat, "sw_idle_stat", 
+                                 "tsov_sw_idle_stat", x_size = 8, y_size = 14)
 
     # generate markdown
     gen_task_idle_stat_report(args, r, md_f)
