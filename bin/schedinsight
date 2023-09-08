@@ -1191,7 +1191,7 @@ def plot_event_chart(args, plot_name, events):
     plt.subplots_adjust(hspace = 0)
 
     # - save to the file
-    fig_name = get_outfile_name(args, plot_name, "svg")
+    fig_name = get_outfile_name(args, plot_name, args.imgtype)
     plt.savefig(fig_name)
     plt.close()
 
@@ -1260,7 +1260,7 @@ def plot_dist_fig(args, plot_name, sorted_values, title, x_label, y_label):
     ax.set_ylabel(y_label)
 
     # - save to the file
-    fig_name = get_outfile_name(args, plot_name, "svg")
+    fig_name = get_outfile_name(args, plot_name, args.imgtype)
     plt.savefig(fig_name)
     plt.close()
 
@@ -1285,7 +1285,7 @@ def plot_corr_figs(args, corrs, plot_name):
                           "wcc=" + "{:.2f}".format(corr.wcc))
 
     # - save to the filewineserver
-    fig_name = get_outfile_name(args, plot_name, "svg")
+    fig_name = get_outfile_name(args, plot_name, args.imgtype)
     plt.savefig(fig_name)
     plt.close()
 
@@ -1362,7 +1362,7 @@ def plot_per_task_stat_over_time(args, ts, title, plot_name, x_size = 3, y_size 
     plt.subplots_adjust(hspace = 0)
 
     # save to the file
-    fig_name = get_outfile_name(args, plot_name, "svg")
+    fig_name = get_outfile_name(args, plot_name, args.imgtype)
     plt.savefig(fig_name)
     plt.close()
 
@@ -1383,7 +1383,7 @@ def plot_pie_chart(args, name_list, cnt_list, plot_name):
     ax.pie(cnt_list, labels=label_list, colors=rgb_list)
 
     # save fig
-    fig_name = get_outfile_name(args, plot_name, "svg")
+    fig_name = get_outfile_name(args, plot_name, args.imgtype)
     plt.savefig(fig_name)
     plt.close()
 
@@ -1414,8 +1414,8 @@ def plot_waker_waiter_graph(args, csv_data, plot_name, thr_cratio):
         
     # - save the graph to file
     odir, fname, suffix = get_outfile_name_x(
-            args, plot_name + "_%f_dot" % thr_cratio, "svg")
-    g.format='svg'
+            args, plot_name + "_%f_dot" % thr_cratio, args.imgtype)
+    g.format= args.imgtype
     g.filename = fname
     g.directory = odir
     try:
@@ -1457,7 +1457,7 @@ def gen_md_tbl_figs(args, col_names, fea, header, f, trans_fn = noop):
     # figures
     l = "|"
     for col_name in col_names:
-        fig_name = get_outfile_name(args, fea + trans_fn(col_name), "svg")
+        fig_name = get_outfile_name(args, fea + trans_fn(col_name), args.imgtype)
         afil, rfil = get_res_path(args, fig_name)
         img = "![](" + rfil + ")"
         l = l + " " + img + " | "
@@ -1486,7 +1486,7 @@ def gen_task_idle_stat_report(args, results, md_f):
     afil, rfil = get_res_path(args, fname)
     print("- [System-wide task stats data](%s)\n" % rfil, file = md_f)
 
-    fname = get_outfile_name(args, "tsov_sw_task_stat", "svg")
+    fname = get_outfile_name(args, "tsov_sw_task_stat", args.imgtype)
     afil, rfil = get_res_path(args, fname)
     print("![](" + rfil + ")\n", file = md_f)
     print("\n\n", file = md_f)
@@ -1495,7 +1495,7 @@ def gen_task_idle_stat_report(args, results, md_f):
     afil, rfil = get_res_path(args, fname)
     print("- [System-wide idle stats data](%s)\n" % rfil, file = md_f)
 
-    fname = get_outfile_name(args, "tsov_sw_idle_stat", "svg")
+    fname = get_outfile_name(args, "tsov_sw_idle_stat", args.imgtype)
     afil, rfil = get_res_path(args, fname)
     print("![](" + rfil + ")\n", file = md_f)
     print("\n\n", file = md_f)
@@ -1553,7 +1553,7 @@ def gen_task_stat_corr(args, results, md_f):
 
     for cset in results.corr_sets:
         print("### - %s\n" % cset.question, file = md_f)
-        fig_name = get_outfile_name(args, "task_stat_corr" + cset.name, "svg")
+        fig_name = get_outfile_name(args, "task_stat_corr" + cset.name, args.imgtype)
         afil, rfil = get_res_path(args, fig_name)
         print("![](" + rfil + ")\n", file = md_f)
     print("\n\n", file = md_f)
@@ -1624,7 +1624,7 @@ def gen_callstack_stat(args, r, md_f):
     print("- [callstack types](" + rfil + ")", file = md_f)
     print("\n\n", file = md_f)
 
-    ofname = get_outfile_name(args, "callstack_type_stat", "svg")
+    ofname = get_outfile_name(args, "callstack_type_stat", args.imgtype)
     afil, rfil = get_res_path(args, ofname)
     print("![](" + rfil + ")", file = md_f)
     print("\n\n", file = md_f)
@@ -1649,11 +1649,11 @@ def gen_waiter_waker_stat(args, results, md_f):
             gen_stat_in_csv(data, f)
 
     # plot overview data in pie charts
-    svg_configs = [("waiter_task", r.waiter_csv.stats, "Distribution of waiters"),
+    img_configs = [("waiter_task", r.waiter_csv.stats, "Distribution of waiters"),
                    ("waker_task", r.waker_csv.stats, "Discribution of wakers"),
                    ("wcw_cs", r.wcw_cs_csv.stats, "Distribution of waiting callstacks"),
                    ("wtw_cst", r.wtw_cst_csv.stats, "Distribution of waiting callstack types")]
-    for name, data, desc in svg_configs:
+    for name, data, desc in img_configs:
         trans_stats = list(zip(*data))
         plot_pie_chart(args, trans_stats[0], trans_stats[1], name)
 
@@ -1675,15 +1675,15 @@ def gen_waiter_waker_stat(args, results, md_f):
         print("- [" + desc +" ](" + rfil + ")\n", file = md_f)
     print("\n\n", file = md_f)
 
-    for name, data, desc in svg_configs:
-        ofname = get_outfile_name(args, name, "svg")
+    for name, data, desc in img_configs:
+        ofname = get_outfile_name(args, name, args.imgtype)
         afil, rfil = get_res_path(args, ofname)
         print("### - " + desc +"\n", file = md_f)
         print("![](" + rfil + ")\n", file = md_f)
     print("\n\n", file = md_f)
 
     for t in wcw_thrs:
-        ofname = get_outfile_name(args, "wtw_graph_%f_dot" % t, "svg")
+        ofname = get_outfile_name(args, "wtw_graph_%f_dot" % t, args.imgtype)
         if os.path.isfile(ofname):
             afil, rfil = get_res_path(args, ofname)
             print("### - %.2f percentile of waker-waiter\n" % t, file = md_f)
@@ -1964,6 +1964,8 @@ def get_cmd_options(argv):
                         help='log file prefix') 
     parser.add_argument('-o', '--output', action='store', required=True,
                         help='a target report file name in markdown format') 
+    parser.add_argument('-i', '--imgtype', action='store', default="png",
+                        help='type of image format (png, svg)' ) 
     parser.add_argument('-k', '--pickle', action='store_true',
                         help='use pickle whenever possible' ) 
     parser.add_argument('-s', '--minsched', action='store', type=int, default=100,
