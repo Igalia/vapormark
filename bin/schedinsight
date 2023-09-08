@@ -740,7 +740,7 @@ class analysis_results:
     # pearson correlations
     corr_sets = None
 
-    # task & idle status
+    # task & idle status using per-task/idle average
     task_csv = None
     idle_csv = None
 
@@ -1004,6 +1004,10 @@ def is_meaningful_task(args, task_stat):
 
 
 def analyze_task_idle_stat(args, r):
+    # per-task stats 
+    ev_task.analyze_stat()
+
+    # collect task/idle stats using per-task average
     stat_names = ["task_name", "num_sched", "num_mig", "num_wake", "num_wait", # 0--4
                   "wait_time_med", "wait_time_avg",
                   "wait_time_aad", "wait_time_total", # 5--8
@@ -1013,11 +1017,6 @@ def analyze_task_idle_stat(args, r):
                   "runtime_aad", "runtime_total", # 13--16
                   "rank_nsched", "rank_nmig", "rank_runtime", "score", # 17--20
                   ]
-
-    # per-task stats 
-    ev_task.analyze_stat()
-
-    # collect system-wide task stats
     task_stats = []
     idle_stats = []
     for k, t in ev_task.task_dict.items():
@@ -1373,7 +1372,7 @@ def gen_md_tbl_figs(args, col_names, fea, header, f, trans_fn = noop):
     print(l, file = f)
     print("\n\n", file = f)
 
-def gen_task_idle_stat_report(args, results, md_f):
+def gen_config(args, md_f):
     # configs
     gen_md_title("%s" % args.prefix , md_f)
 
@@ -1388,7 +1387,9 @@ def gen_task_idle_stat_report(args, results, md_f):
     print("- mtime: %s" % mtime, file = md_f)
     print("\n\n", file = md_f)
 
-    print("## Task statistics\n\n", file = md_f)
+
+def gen_task_idle_stat_report(args, results, md_f):
+    print("## Task statistics using per-task average\n\n", file = md_f)
     # links to raw data
     fname = get_outfile_name(args, "task_stat", "csv")
     afil, rfil = get_res_path(args, fname)
@@ -1430,7 +1431,10 @@ def gen_task_stat_corr(args, results, md_f):
         plot_corr_figs(args, cset.corrs, "task_stat_corr" + cset.name)
 
     # generate markdown
-    print("## Pearson correlation between task features\n\n", file = md_f)
+    print("## Correlation between task features\n\n", file = md_f)
+    print("- PCC: Pearson correlation coefficient\n", file = md_f)
+    print("- WCC: Weighted correlation coefficient using `num_sched`\n", file = md_f)
+
     for cset in results.corr_sets:
         print("### - %s\n" % cset.question, file = md_f)
         fig_name = get_outfile_name(args, "task_stat_corr" + cset.name, "svg")
@@ -1821,6 +1825,7 @@ def gen_report(args, results):
     # generate a report in markdow
     md_fname = args.output + ".md"
     with open(md_fname, "w") as md_f:
+        gen_config(args, md_f)
         gen_task_idle_stat(args, results, md_f)
         gen_task_stat_corr(args, results, md_f)
         gen_task_stat_over_time(args, results, md_f)
