@@ -1306,8 +1306,6 @@ def plot_per_task_stat_over_time(args, ts, title, plot_name, x_size = 3, y_size 
         l = len(data)
         ax.fill_between(range(l), data, color = c)
         ax.set_ylabel(y_label)
-        ax.tick_params(left = True, right = False, labelleft = True, 
-                       labelbottom = False, bottom = False)
 
     def plot_filled_violin(ax, data, c, y_label):
         l = len(data)
@@ -1340,8 +1338,6 @@ def plot_per_task_stat_over_time(args, ts, title, plot_name, x_size = 3, y_size 
 
     # decoration
     axs[0].set_title(title)
-    axs[0].tick_params(labeltop = True, top = True)
-    axs[5].tick_params(labelbottom = True, bottom = True)
 
     # violin plot for wait time, sched delay, and runtimes
     plot_filled_violin(axs[6], ts.sched_waits, 
