@@ -68,38 +68,38 @@ class ev_time:
 
 class task_waker_waiter:
     # class dict
-    wcwn_dict = {}      # (waker, callstack, waiter)     => count
-    wtwn_dict = {}      # (waiter, callstak type, waker) => count
+    wcwn_dict = {}      # (waker, callstack, callstack typem waiter)   => count
+    wtwn_dict = {}      # (waiter, callstak type, waker)               => count
 
-    w_cwn_ddict = {}    # waker => (callstack, waiter)   => count
+    w_cwn_ddict = {}    # waker => (callstack, callstack type, waiter) => count
     w_twn_ddict = {}    # waker => (cs type, waiter)     => count
 
-    wc_wn_ddict = {}    # waiter => (callstack, waker)   => count
+    wc_wn_ddict = {}    # waiter => (callstack, callstack type, waker) => count
     wt_wn_ddict = {}    # waiter => (cs type, waker)     => count
     
     waiter_dict = {}    # waiter                         => count
     waker_dict = {}     # waker                          => count
 
-    cs_dict = {}        # cs                             => count
+    cs_dict = {}        # cs, cst                        => count
     cst_dict = {}       # cst                            => count
 
     sep = "$@^__^@$"
 
     @classmethod
     def add_wcw(cls, t_waker, waiter_cs, t_waiter):
-        # (waker, callstack, waiter)     => count
-        key = cls.sep.join( [str(t_waker), waiter_cs.cs, str(t_waiter)] )
+        # (waker, callstack, callstack type, waiter)     => count
+        key = cls.sep.join( [str(t_waker), waiter_cs.cs, waiter_cs.cs_type, str(t_waiter)] )
         cls.wcwn_dict[key] = cls.wcwn_dict.get(key, 0) + 1
         # (waiter, callstak type, waker) => count
         key = cls.sep.join( [str(t_waker), waiter_cs.cs_type, str(t_waiter)] )
         cls.wtwn_dict[key] = cls.wtwn_dict.get(key, 0) + 1
                                                  
-        # waker => (callstack, waiter)   => count
+        # waker => (callstack, callstack type, waiter)   => count
         key = str(t_waker)
         dic = cls.w_cwn_ddict.get(key, None)
         if dic == None:
             dic = cls.w_cwn_ddict[key] = {}
-        key = cls.sep.join( [waiter_cs.cs, str(t_waiter)] )
+        key = cls.sep.join( [waiter_cs.cs, waiter_cs.cs_type, str(t_waiter)] )
         dic[key] = dic.get(key, 0) + 1
         # waker => (cs type, waiter)     => count
         key = str(t_waker)
@@ -109,12 +109,12 @@ class task_waker_waiter:
         key = cls.sep.join( [waiter_cs.cs_type, str(t_waiter)] )
         dic[key] = dic.get(key, 0) + 1
 
-        # waiter => (callstack, waker)    => count
+        # waiter => (callstack, callstack type, waker)    => count
         key = str(t_waiter)
         dic = cls.wc_wn_ddict.get(key, None)
         if dic == None:
            dic = cls.wc_wn_ddict[key] = {}
-        key = cls.sep.join( [waiter_cs.cs, str(t_waker)] )
+        key = cls.sep.join( [waiter_cs.cs, waiter_cs.cs_type, str(t_waker)] )
         dic[key] = dic.get(key, 0) + 1
         # waiter => (cs type, waker)     => count
         key = str(t_waiter)
@@ -131,8 +131,8 @@ class task_waker_waiter:
         key = str(t_waker)
         cls.waker_dict[key] = cls.waker_dict.get(key, 0) + 1
 
-        # cs                             => count
-        key = waiter_cs.cs
+        # cs, cst                        => count
+        key = cls.sep.join( [waiter_cs.cs, waiter_cs.cs_type] )
         cls.cs_dict[key] = cls.cs_dict.get(key, 0) + 1
         # cst                            => count
         key = waiter_cs.cs_type
@@ -173,7 +173,8 @@ class task_waker_waiter:
         data_s = list(cls.cs_dict.items())
         data_s.sort(reverse = True, key = lambda x: x[1])
         for data, cnt in data_s:
-            yield( [data, cnt] )
+            toks = data.split(cls.sep)
+            yield( [*toks, cnt] )
 
     @classmethod
     def get_cst(cls):
@@ -1647,11 +1648,15 @@ def gen_waiter_waker_stat(args, results, md_f):
     # plot overview data in pie charts
     img_configs = [("waiter_task", r.waiter_csv.stats, "Distribution of waiters"),
                    ("waker_task", r.waker_csv.stats, "Discribution of wakers"),
-                   ("wcw_cs", r.wcw_cs_csv.stats, "Distribution of waiting callstacks"),
                    ("wtw_cst", r.wtw_cst_csv.stats, "Distribution of waiting callstack types")]
     for name, data, desc in img_configs:
         trans_stats = list(zip(*data))
         plot_pie_chart(args, trans_stats[0], trans_stats[1], name)
+
+    img_configs = [("wcw_cs", r.wcw_cs_csv.stats, "Distribution of waiting callstacks"),]
+    for name, data, desc in img_configs:
+        trans_stats = list(zip(*data))
+        plot_pie_chart(args, trans_stats[0], trans_stats[2], name)
 
     # plot graphs
     global wcw_thrs
@@ -1742,12 +1747,12 @@ def analyze_callstack(args, r):
     ev_callstack.analyze_stat()
 
     # collect call stack information
-    stat_names = ["callstack", "num_sched", "num_task_scheduled_out"]
-    stat_formats = ["{0:^50}"] + ["{0:>14}"] * (len(stat_names) - 1)
+    stat_names = ["callstack", "callstack_type", "num_sched", "num_task_scheduled_out"]
+    stat_formats = ["{0:^50}", "{0:^50}"] + ["{0:>14}"] * (len(stat_names) - 1)
     stats = []
     for k, cs in ev_callstack.cs_dict.items():
         s = cs.callstack_stat
-        stats.append( (str(cs), s.num_sched_events, s.num_ctask) )
+        stats.append( (str(cs), cs.cs_type, s.num_sched_events, s.num_ctask) )
 
     # sort by the number of events
     stats.sort(reverse = True, key = lambda x: x[1])
@@ -1840,9 +1845,9 @@ def analyze_waker_waiter(args, r):
     # - (waker, callstack, waiter)     => count
     stats = list(task_waker_waiter.get_wcwn())
     r.wcw_csv.stats = append_ratio_n_cratio(stats)
-    r.wcw_csv.names = ["waker_task", "waiter_callstack", "waiter_task",
-                       "num_wake", "wake_ratio", "wake_cratio"]
-    r.wcw_csv.formats = ["{0:^30}", "{0:^50}", "{0:^30}",
+    r.wcw_csv.names = ["waker_task", "waiter_callstack", "waiter_callstack_type",
+                       "waiter_task", "num_wake", "wake_ratio", "wake_cratio"]
+    r.wcw_csv.formats = ["{0:^30}", "{0:^50}", "{0:^50}", "{0:^30}",
                          "{0:>14}", "{0:>14}", "{0:>14}"]
 
     # get waker-cst-waiter stats
@@ -1862,13 +1867,14 @@ def analyze_waker_waiter(args, r):
         stats = list(task_waker_waiter.get_w_twn(str(task)))
         r.w_twn_csv.stats = r.w_twn_csv.stats + append_ratio_n_cratio(stats)
 
-    r.w_cwn_csv.names = ["waker_task", "waiter_callstack", "waiter_task",
-                         "num_wake", "wake_ratio"]
+    r.w_cwn_csv.names = ["waker_task", "waiter_callstack", "waiter_callstack_type",
+                         "waiter_task", "num_wake", "wake_ratio"]
+    r.w_cwn_csv.formats = ["{0:^30}", "{0:^50}", "{0:^50}", 
+                           "{0:^30}", "{0:>14}", "{0:>14}"]
     r.w_twn_csv.names = ["waker_task", "waiter_callstack_type", "waiter_task", 
                          "num_wake", "wake_ratio"]
-    r.w_cwn_csv.formats = ["{0:^30}", "{0:^50}", "{0:^30}",
+    r.w_twn_csv.formats = ["{0:^30}", "{0:^50}", "{0:^30}",
                            "{0:>14}", "{0:>14}"]
-    r.w_twn_csv.formats = r.w_cwn_csv.formats
 
     # waiter => cs-watier, waker => cst-waker
     tasks = list(task_waker_waiter.get_waiter())
@@ -1879,13 +1885,14 @@ def analyze_waker_waiter(args, r):
         stats = list(task_waker_waiter.get_wt_wn(str(task)))
         r.wt_wn_csv.stats = r.wt_wn_csv.stats + append_ratio_n_cratio(stats)
 
-    r.wc_wn_csv.names = ["waiter_task", "waiter_callstack", "waker_task",
-                         "num_wake", "wake_ratio"]
+    r.wc_wn_csv.names = ["waiter_task", "waiter_callstack", "waiter_callstack_type",
+                         "waker_task", "num_wake", "wake_ratio"]
+    r.wc_wn_csv.formats = ["{0:^30}", "{0:^50}", "{0:^50}", "{0:^30}",
+                           "{0:>14}", "{0:>14}"]
     r.wt_wn_csv.names = ["waiter_task", "waiter_callstack_type", "waker_task",
                          "num_wake", "wake_ratio"]
-    r.wc_wn_csv.formats = ["{0:^30}", "{0:^50}", "{0:^30}",
+    r.wt_wn_csv.formats = ["{0:^30}", "{0:^50}", "{0:^30}",
                            "{0:>14}", "{0:>14}"]
-    r.wt_wn_csv.formats = r.wc_wn_csv.formats
 
     # get waiter stats
     # - waiter                         => count
@@ -1905,8 +1912,10 @@ def analyze_waker_waiter(args, r):
     # - cs                             => count
     stats = list(task_waker_waiter.get_cs())
     r.wcw_cs_csv.stats = append_ratio_n_cratio(stats)
-    r.wcw_cs_csv.names = ["callstack", "num_wake", "wake_ratio", "wake_cratio"]
-    r.wcw_cs_csv. formats = ["{0:^50}", "{0:>14}", "{0:>14}", "{0:>14}"]
+    r.wcw_cs_csv.names = ["callstack", "callstack_type", 
+                          "num_wake", "wake_ratio", "wake_cratio"]
+    r.wcw_cs_csv. formats = ["{0:^50}", "{0:^50}", 
+                             "{0:>14}", "{0:>14}", "{0:>14}"]
   
     # get cst stats
     # - cst                            => count
