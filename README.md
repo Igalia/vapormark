@@ -138,6 +138,20 @@ Launching, starting, and stopping `MangoHud` is not integrated with `vapormark`.
   | Factorio               | On terminal: `factorio --benchmark` [map.zip](https://factoriobox.1au.us/map/download/91c009e61f44c3c532f7152b0501ea0fc920723148dd1c38c4da129eb9d399f9.zip) `--benchmark-ticks 1000 --disable-audio` |
 
 
+#### `schedmon`: collecting the detailed scheduling activities
+`schedmon` collects the detailed system-wide scheduling activities. It internally relies on `perf sched record` command.
+
+```
+usage: schedmon [-h] -o OUTDIR -l LOG
+
+Collect the detailed scheduler activity internally using `perf sched`
+
+options:
+  -h, --help            show this help message and exit
+  -o OUTDIR, --outdir OUTDIR
+                        output directory
+  -l LOG, --log LOG     log file prefix
+```
 
 Analyzing the collected data
 ----------------------------
@@ -191,10 +205,35 @@ options:
   -q, --quiet           do not print result to stdout
 ```
 
+#### `schedinsight`: analyzing the results of `schedmon`
+
+```
+usage: schedinsight [-h] -l LOGDIR -p PREFIX -o OUTPUT [-i IMGTYPE] [-k] [-s MINSCHED] [-t TIMELIMIT]
+
+Report the detailed analysis of scheduliing activities collected by `perf sched record`
+
+options:
+  -h, --help            show this help message and exit
+  -l LOGDIR, --logdir LOGDIR
+                        a log directory
+  -p PREFIX, --prefix PREFIX
+                        log file prefix
+  -o OUTPUT, --output OUTPUT
+                        a target report file name in markdown format
+  -i IMGTYPE, --imgtype IMGTYPE
+                        type of image format (png, svg)
+  -k, --pickle          use pickle whenever possible
+  -s MINSCHED, --minsched MINSCHED
+                        set the minimum number of schedules for task analysis
+  -t TIMELIMIT, --timelimit TIMELIMIT
+                        time limit to draw a graph in seconds
+```
+
+
 Generating a (comparison) report
 --------------------------------
 
-`vapormark` provides a reporting feature that compares the results of multiple configurations. This is especially useful when checking the impact of a certain optimization. When more than one log directories are given (with multiple -l options), `report` uses the logs in the first directory as a baseline and shows the relative delta in percent. 
+`vapormark` provides a reporting feature that compares the results of multiple configurations. This is especially useful when checking the impact of a certain optimization. When more than one log directories are given (with multiple -l options), `report` uses the logs in the first directory as a baseline and shows the relative delta in percent. Note that `report` does not support the comparison of `schedmon` logs yet.
 
 ```
 usage: report [-h] -l LOGDIR -p PREFIX -o OUTPUT [-f] [-g]
