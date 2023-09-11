@@ -509,7 +509,7 @@ class callstack_type:
                 ("kmem_cache_alloc", "alloc"),
                 ("vmalloc", "alloc"),
                 ("kmalloc", "alloc"),
-                ("alloc_pages", "alloc")
+                ("alloc_pages", "alloc"),
                 # sched preemption
                 ("asm_sysvec_apic_timer_interrupt", "sched_preempt"),
                 ("asm_sysvec_reschedule_ipi", "sched_preempt"),
