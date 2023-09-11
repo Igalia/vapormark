@@ -443,8 +443,12 @@ class callstack_type:
                 # wait for events
                 ("epoll_", "epoll"),
                 ("sys_poll", "poll"),
+                ("unix_poll", "poll"),
+                ("sock_poll", "poll"),
                 ("sys_select", "select"),
+                ("select_estimate_accuracy", "select"),
                 ("sys_pselect", "pselect"),
+                ("do_pselect", "pselect"),
                 # pipe IO
                 ("pipe_read", "pipe_read"),
                 ("pipe_write", "pipe_write"),
@@ -460,18 +464,34 @@ class callstack_type:
                 ("down_write", "lock"),
                 ("_unlock", "unlock"),
                 ("_lock", "lock"),
+                ("rwsem_wake", "unlock"),
                 # file IO
-                ("vfs_read", "vfs_read"),
-                ("vfs_write", "vfs_write"),
-                ("sys_read", "sys_read"),
-                ("sys_write", "sys_write"),
+                ("vfs_read", "fs_read"),
+                ("sys_read", "fs_read"),
+                ("do_read", "fs_read"),
+                ("do_iter_read", "fs_read"),
+                ("vfs_write", "fs_write"),
+                ("sys_write", "fs_write"),
+                ("do_write", "fs_write"),
+                ("generic_perform_write", "fs_write"),
+                ("jbd2_", "fs_write"),
+                ("sys_openat", "fs_open"),
+                ("blk_mq", "blk_mq:bio"),
                 ("sys_ioctl", "ioctl"),
+                ("_ioctl", "ioctl"),
                 ("io_schedule", "io_schedule"),
                 ("page_fault", "page_fault"),
+                ("do_fault", "page_fault"),
+                ("handle_mm_fault", "page_fault"),
                 # network IO
                 ("sys_recvmsg", "recvmsg"),
                 ("sys_recvfrom", "recvfrom"),
                 ("sys_sendto", "sendto"),
+                ("unix_stream_sendmsg", "sendmsg"),
+                ("unix_stream_recvmsg", "recvmsg"),
+                ("unix_stream_read_generic", "recvmsg"),
+                ("ip_queue_xmit", "net:xmit"),
+                ("dev_queue_xmit", "net:xmit"),
                 # system call
                 ("sys_clone", "clone"),
                 ("ret_from_fork", "fork"),
@@ -489,6 +509,7 @@ class callstack_type:
                 ("kmem_cache_alloc", "alloc"),
                 ("vmalloc", "alloc"),
                 ("kmalloc", "alloc"),
+                ("alloc_pages", "alloc")
                 # sched preemption
                 ("asm_sysvec_apic_timer_interrupt", "sched_preempt"),
                 ("asm_sysvec_reschedule_ipi", "sched_preempt"),
@@ -1800,8 +1821,8 @@ def process_awake_event(r):
         if e.ty != ev_type.AWAKE:
             continue
         # find waker and waiter
-        t_waker  = e.next_task
-        t_waiter = e.cur_task 
+        t_waker  = e.next_task   # current task  (i.e., waker)
+        t_waiter = e.cur_task    # awakened task (i.e., waiter)
 
         # find waiter's waiting call stack
         wait_event = find_waiting_event(t_waiter, i, events)
