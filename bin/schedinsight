@@ -1667,15 +1667,15 @@ def gen_waiter_waker_stat(args, results, md_f):
             gen_stat_in_csv(data, f)
 
     # plot overview data in pie charts
-    img_configs = [("waiter_task", r.waiter_csv.stats, "Distribution of waiters"),
+    img_configs1 = [("waiter_task", r.waiter_csv.stats, "Distribution of waiters"),
                    ("waker_task", r.waker_csv.stats, "Discribution of wakers"),
                    ("wtw_cst", r.wtw_cst_csv.stats, "Distribution of waiting callstack types")]
-    for name, data, desc in img_configs:
+    for name, data, desc in img_configs1:
         trans_stats = list(zip(*data))
         plot_pie_chart(args, trans_stats[0], trans_stats[1], name)
 
-    img_configs = [("wcw_cs", r.wcw_cs_csv.stats, "Distribution of waiting callstacks"),]
-    for name, data, desc in img_configs:
+    img_configs2 = [("wcw_cs", r.wcw_cs_csv.stats, "Distribution of waiting callstacks"),]
+    for name, data, desc in img_configs2:
         trans_stats = list(zip(*data))
         plot_pie_chart(args, trans_stats[0], trans_stats[2], name)
 
@@ -1697,6 +1697,7 @@ def gen_waiter_waker_stat(args, results, md_f):
         print("- [" + desc +" ](" + rfil + ")\n", file = md_f)
     print("\n\n", file = md_f)
 
+    img_configs = img_configs1 + img_configs2
     for name, data, desc in img_configs:
         ofname = get_outfile_name(args, name, args.imgtype)
         afil, rfil = get_res_path(args, ofname)
