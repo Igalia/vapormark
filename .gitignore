@@ -1,6 +1,9 @@
 /bin/schbench
+/bin/gbench
 /bin/schedstat.py
 /logs*
+.depend
+*.o
 
 # http://www.gnu.org/software/automake
 

@@ -31,7 +31,7 @@ Just clone this repository and hit `make` on the top of the directory. The build
 If you want to measure FPS, install `MangoHud`. For `SteamDeck`, please refer the following steps:
   1. Press `STEAM` button then choose `Power -> Switch to Desktop`
   2. On Plasma Desktop, launch `Discover Center`. Then find and install `MangoHud`
-  3. Copy the ManguHud configuration file, `vapormark/config/MangoHud.conf` to `/home/deck/mangologs-vapormark`. This is the minimal MangoHud configuration that `vapormark` expects.
+  3. Copy the ManguHud configuration file, `vapormark/config/MangoHud.conf` to `/home/deck/.config/MangoHud/MangoHud.conf`. This is the minimal MangoHud configuration that `vapormark` expects. MangoHud logs will be stored to the `/home/deck/mangologs-vapormark/` directory.
 
 Running a benchmark and collecting performance data
 ---------------------------------------------------
