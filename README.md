@@ -167,7 +167,7 @@ options:
   -h, --help            show this help message and exit
   -o OUTDIR, --outdir OUTDIR
                         output directory
-  -l LOG, --log LOG     log file prefix
+  -l LOG, --log LOG     log file prefix, or path to directory containing log files
   -q, --quiet           do not print result to stdout
 ```
 
