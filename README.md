@@ -253,7 +253,7 @@ options:
   -g, --debug           print out debug messages
 
 For example, `report -l base_dir -l cmp_dir -p game1 -o report.md` compares `game1` logs 
-in two directoreis -- `base_dir` and `cmp_dir` -- and generates `report.md`. `base_dir` 
+in two directories -- `base_dir` and `cmp_dir` -- and generates `report.md`. `base_dir`
 is used in calculating the relative difference. When only one log directory is given, 
 only the summary of results without comparison is provided. It expects certain file 
 extensions: `*.factorio_out` for factorio benchmark and `*.schbench_out` for schbench 
