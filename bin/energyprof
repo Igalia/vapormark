@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+import os
+import sys
+import subprocess
+import signal
+import glob
+import argparse
+import psutil
+
+bg_proc = None
+
+def ignore_term_signals(): 
+    term_signals = (signal.SIGTERM, signal.SIGINT, signal.SIGABRT, 
+                    signal.SIGBUS, signal.SIGILL, signal.SIGSEGV, 
+                    signal.SIGHUP)
+    for s in term_signals: 
+        # do nothing upon kill signals for graceful exit
+        signal.signal(s, lambda signum, frame: None)
+
+def get_log_name(args):
+    log = os.path.join(args.outdir, args.log + "-energyprof__.log")
+    return log
+
+def get_cpu_configs(args):
+    configs = {8: ["0", "0-1", "0,4", "0-3", "0,1,4,5", "0-7"],
+               16: ["0", "0-1", "0,8", "0-3", "0,1,7,8", "0-7", "0-3,8-11", "0-15"], }
+    return configs[args.num_cpus]
+
+def chcpu(args, config, f):
+    subprocess.Popen("chcpu -d 1-" + str(args.num_cpus), shell=True, stdout=f, stderr=f).wait()
+    subprocess.Popen("chcpu -e " + config, shell=True, stdout=f, stderr=f).wait()
+    subprocess.Popen("sleep 1", shell=True).wait()
+
+def print_config(args, config, load, f):
+    fds = [f, sys.__stdout__]
+    for fd in fds:
+        print("## cpu=" + config + ", load=" + str(load) +
+              ",util=" + str(load * args.num_cpus), file=fd)
+
+def run_ubench(args, config, load, f):
+    cmd = "perf stat -a --per-socket -e power/energy-pkg/ " + \
+          "stress-ng --change-cpu --no-rand-seed " + \
+          "--taskset " + config + " --all " + str(args.num_cpus) + \
+          " --cpu " + str(args.num_cpus) + " --cpu-method all " + \
+          " --cpu-load " + str(load) + " --cpu-load-slice 3 " + \
+          " --metrics -t " + str(args.time_sec)
+    subprocess.Popen(cmd, shell=True, stdout=f, stderr=f).wait()
+
+def run_energyprof(args):
+    # prep for gracefil termination
+    ignore_term_signals()
+
+    # prep for logging
+    subprocess.Popen("mkdir -p " + args.outdir,
+                     shell=True, stdout=None, stderr=None).wait()
+    outdir = args.outdir
+    log = get_log_name(args)
+    with open(log, 'w') as f:
+        # turn on turbostat as a background process
+        global bg_proc
+        bg_proc = subprocess.Popen(
+                "taskset -c 0 turbostat --header_iterations 1 -S",
+                shell=True, stdout=f, stderr=f)
+        subprocess.Popen("sleep 5", shell=True).wait()
+
+        # for each CPU set
+        for config in get_cpu_configs(args):
+            # make only target CPUs online
+            chcpu(args, config, f)
+
+            # for low load settings
+            for load in range(1, 7):
+                print_config(args, config, load, f)
+                run_ubench(args, config, load, f)
+
+            # for high load settings
+            for load in range(12, 101, 6):
+                print_config(args, config, load, f)
+                run_ubench(args, config, load, f)
+
+        wait_for_energyprof(args, f)
+
+
+def wait_for_energyprof(args, f):
+    # stop the turbostat
+    subprocess.Popen("pkill turbostat", shell=True).wait()
+    global bg_proc
+    bg_proc.wait()
+
+    # activate all CPUs
+    chcpu(args, "0-" + str(args.num_cpus - 1), f)
+
+def get_cmd_options(argv):
+    parser = argparse.ArgumentParser(
+            prog = "energyprof",
+            description = "Collect energy and performance statistics according to CPU load",
+            epilog = "energyprof internally uses 'stress-ng', 'chcpu', 'taskset', and 'perf'.")
+    parser.add_argument('-c', '--num_cpus', action='store', type=int,
+                        required=True, help='number of CPUs of this machine') 
+    parser.add_argument('-t', '--time_sec', action='store', type=int,
+                        default=120, help='time in sec to run stress-_ng') 
+    parser.add_argument('-o', '--outdir', action='store', required=True,
+                        help='output directory') 
+    parser.add_argument('-l', '--log', action='store', required=True,
+                        help='log file prefix') 
+
+    args = parser.parse_args(argv)
+    return args
+
+if __name__ == "__main__":
+    args = get_cmd_options(sys.argv[1:])
+    run_energyprof(args)
