@@ -46,7 +46,9 @@ def report_stat_in_csv(col_names, stat_ll, f):
         print("{0:<20}".format(key), end=", ", file = f)
         for c in range(ncol):
             _, val= stat_ll[r][c]
-            if is_float(val):
+            if val is None:
+                print("{0:>20}".format("%s" % "N/A"), end=get_sep(c, ncol), file = f)
+            elif is_float(val):
                 print("{0:>20}".format("%.4f" % val), end=get_sep(c, ncol), file = f)
             else:
                 print("{0:>20}".format(int(val)), end=get_sep(c, ncol), file = f)
@@ -241,7 +243,7 @@ def parse_log_ef(log, parse_tbl):
     # sort statistics for easier interpretation
     stat2 = []
     for key, (pos, name) in parse_tbl:
-        stat2.append( (name, stat[name]) )
+        stat2.append( (name, stat.get(name)) )
     return stat2
 
 def procmon_stat_energy(args):
