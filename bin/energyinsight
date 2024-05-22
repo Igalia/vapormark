@@ -1,0 +1,240 @@
+#!/usr/bin/env python3
+import os
+import sys
+import subprocess
+import signal
+import glob
+import argparse
+import psutil
+
+def get_log_name(args):
+    log = os.path.join(args.outdir, args.log + "-energyprof__.log")
+    return log
+
+def get_csv_name(args):
+    log = os.path.join(args.outdir, args.log + "-energyinsight__.csv")
+    return log
+
+def get_nr_cpus(s):
+    nr = 0
+    toks = s.split(',')
+    for tok in toks:
+        cpus = tok.split('-')
+        if len(cpus) == 2:
+            nr += int(cpus[1]) - int(cpus[0]) + 1
+        else:
+            nr += 1
+    return str(nr)
+
+def parse_config(f):
+    '''
+    ## cpu=0, load=1, util=16
+    '''
+    (cpu, nr_cpu, load, util, per_cpu_util) = (None, None, None, None, None)
+    pos = 0
+    while True:
+        pos = f.tell()
+        line = f.readline()
+        if line == "":
+            return (None, None, None, None, None)
+        toks = line.split()
+        if len(toks) == 0:
+            continue
+        if toks[0] != "##":
+            continue
+        cpu = toks[1].split("=")[1][:-1]
+        nr_cpus = get_nr_cpus(cpu)
+        load = toks[2].split("=")[1][:-1]
+        util = toks[3].split("=")[1]
+        per_cpu_util = str(float(util) / int(nr_cpus))
+        break
+    f.seek(pos)
+    return (cpu, nr_cpus, load, util, per_cpu_util)
+
+def get_data_in_2_toks(key, index_toks, data_toks):
+    idx = next((i for i, x in enumerate(index_toks) if x == key), None)
+    if idx == None:
+        return None
+    return data_toks[idx]
+    
+def do_parse_turbostat(f):
+    '''
+    Avg_MHz	Busy%	Bzy_MHz	TSC_MHz	IPC	IRQ	POLL	C1	C2	C3	POLL%	C1%	C2%	C3%	CorWatt	PkgWatt
+    506	18.83	2688	3294	1.52	1156	4	15	51	682	0.00	0.26	0.49	80.94	0.51	2.24
+    '''
+    (avg_mhz, bzy_mhz, ipc, corwatt, pkgwatt) = (None, None, None, None, None)
+    pos = 0
+    while True:
+        # index line
+        pos = f.tell()
+        line = f.readline()
+        index_toks= line.split()
+        if len(index_toks) == 0:
+            continue
+        if index_toks[0] != "Avg_MHz":
+            if index_toks[0] == "stress-ng:" and index_toks[1] == "metrc:":
+                break
+            continue
+
+        # data line
+        pos = f.tell()
+        line = f.readline()
+        data_toks = line.split()
+        if len(data_toks) == 0:
+            break 
+        if not data_toks[0][0].isnumeric():
+            break 
+
+        avg_mhz = get_data_in_2_toks("Avg_MHz", index_toks, data_toks)
+        bzy_mhz = get_data_in_2_toks("Bzy_MHz", index_toks, data_toks)
+        ipc = get_data_in_2_toks("IPC", index_toks, data_toks)
+        corwatt = get_data_in_2_toks("CorWatt", index_toks, data_toks)
+        pkgwatt = get_data_in_2_toks("PkgWatt", index_toks, data_toks)
+
+        break
+    f.seek(pos)
+    return (avg_mhz, bzy_mhz, ipc, corwatt, pkgwatt)
+        
+def parse_turbostat(f):
+    (avg_mhz, bzy_mhz, ipc, corwatt, pkgwatt) = (0.0, 0.0, 0.0, 0.0, 0.0)
+    x = 0
+    # calculate average of turbostat results for one configuration
+    while True:
+        (a, b, i, c, p) =  do_parse_turbostat(f)
+        if a == None:
+            break
+        avg_mhz += float(a)
+        bzy_mhz += float(b)
+        ipc += float(i)
+        corwatt += float(c)
+        pkgwatt += float(p)
+        x += 1
+    return (str(avg_mhz/x), str(bzy_mhz/x), str(ipc/x), str(corwatt/x), str(pkgwatt/x))
+
+def parse_stress_ng(f):
+    '''
+    stress-ng: metrc: [3044] stressor       bogo ops real time  usr time  sys time   bogo ops/s     bogo ops/s CPU used per       RSS Max
+    stress-ng: metrc: [3044]                           (secs)    (secs)    (secs)   (real time) (usr+sys time) instance (%)          (KB)
+    stress-ng: metrc: [3044] cpu               23488    120.00     19.20      0.36       195.73        1200.76         1.02          7408
+    '''
+    bogo_ops = None
+    pos = 0
+    while True:
+        # index line
+        pos = f.tell()
+        line = f.readline()
+        index_toks= line.split()
+        if len(index_toks) == 0:
+            continue
+        if index_toks[0] != "stress-ng:" or index_toks[1] != "metrc:":
+            continue
+        line = f.readline()
+
+        # data line
+        pos = f.tell()
+        line = f.readline()
+        data_toks = line.split()
+        if len(data_toks) != 12: 
+            break 
+        if not data_toks[8][0].isnumeric():
+            break 
+        bogo_ops = data_toks[8]
+        break
+    f.seek(pos)
+    return (bogo_ops, )
+
+def parse_perf_power(f):
+    '''
+    Performance counter stats for 'system wide':
+    S0        1             285.74 Joules power/energy-pkg/
+    '''
+    joules = None
+    pos = 0
+    while True:
+        # first line
+        pos = f.tell()
+        line = f.readline()
+        toks= line.split()
+        if len(toks) == 0:
+            continue
+        if toks[0] != "Performance" or toks[1] != "counter" or toks[2] != "stats":
+            continue
+        line = f.readline()
+
+        # second line
+        pos = f.tell()
+        line = f.readline()
+        toks = line.split()
+        if len(toks) != 5: 
+            break 
+        if not toks[2][0].isnumeric():
+            break 
+        joules = toks[2].replace(",", "")
+        line = f.readline()
+
+        # third line
+        line = f.readline()
+        break
+    f.seek(pos)
+    return (joules, )
+
+def gen_data_in_csv(args, data):
+    csv = get_csv_name(args)
+    with open(csv, "w") as f:
+        for row in data:
+            row_str = "| ".join(row)
+            print("| " + row_str + " |", file = f)
+
+def report_energyinsight_in_csv(args):
+    log = get_log_name(args)
+    data = [("cpu", "nr_cpus", "load", "util", "per_cpu_util",
+             "avg_mhz", "bzy_mhz", "ipc", "corwatt", "pkgwatt",
+             "bogo_ops",
+             "joules",
+             "ops/joule")]
+
+    with open(log, 'r') as f:
+        while True:
+            c = parse_config(f)
+            if c[0]== None:
+                break
+
+            t = parse_turbostat(f)
+            if t[0] == None:
+                break
+
+            s = parse_stress_ng(f)
+            if s[0] == None:
+                break
+
+            j = parse_perf_power(f)
+            if j[0] == None:
+                break
+
+            o = (str(float(s[0]) / float(j[0])), )
+
+            row = c + t + s + j + o
+            data.append(row)
+
+    gen_data_in_csv(args, data)
+
+def get_cmd_options(argv):
+
+    parser = argparse.ArgumentParser(
+            prog = "energyinsight",
+            description = "Report energy usage per CPU load and number of online CPUs",)
+    parser.add_argument('-o', '--outdir', action='store', required=True,
+                        help='output directory') 
+    parser.add_argument('-l', '--log', action='store', required=True,
+                        help='output log file prefix') 
+    parser.add_argument('-q', '--quiet', action='store_true',
+                        help='do not print result to stdout' ) 
+    args = parser.parse_args(argv)
+    return args
+
+if __name__ == "__main__":
+    args = get_cmd_options(sys.argv[1:])
+    report_energyinsight_in_csv(args)
+
+
+
