@@ -94,7 +94,7 @@ def get_cmd_options(argv):
     parser = argparse.ArgumentParser(
             prog = "energyprof",
             description = "Collect energy and performance statistics according to CPU load",
-            epilog = "energyprof internally uses 'stress-ng', 'chcpu', 'taskset', and 'perf'.")
+            epilog = "energyprof internally uses 'turbostat', 'stress-ng', 'chcpu', 'taskset', and 'perf'.")
     parser.add_argument('-c', '--num_cpus', action='store', type=int,
                         required=True, help='number of CPUs of this machine') 
     parser.add_argument('-t', '--time_sec', action='store', type=int,

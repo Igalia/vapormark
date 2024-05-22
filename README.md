@@ -20,11 +20,13 @@ External Dependencies
 ---------------------
 `vapormark` uses the following in each phase:
   - running a benchmark (i.e., collecting performance data)
-      - [schbench](https://kernel.googlesource.com/pub/scm/linux/kernel/git/mason/schbench/)
+      - [schbench](https://kernel.googlesource.com/pub/scm/linux/kernel/git/mason/schbench/),
+        [stress-ng](https://github.com/ColinIanKing/stress-ng), and
+        [gbench](https://github.com/Igalia/vapormark/tree/main/micro-bench/gbench)
         for micro-benchmarking of scheduler performance
       - [MangoHud](https://github.com/flightlessmango/MangoHud) for measuring
         FPS (frame per second) during a running game
-      - `strace`, `trace-cmd`, `cpupower`, and `perf` for collecting processor states
+      - `strace`, `trace-cmd`, `cpupower`, `turbostat`, `chcpu`, `taskset`, and `perf` for collecting processor states
   - analyzing the collected data
       - `matplotlib` and `graphviz` python library for generating graphs
   - generating a report
@@ -192,13 +194,34 @@ options:
   -l LOG, --log LOG     log file prefix
 ```
 
+#### `energyprof`: collecting energy and performance statistics according to CPU load
+`energyprof` measures energy consumption and performance while running
+`stress-ng` with various CPU loads and various numbers of online CPUs. It
+internally relies on `turbostat`, `stress-ng`, `chcpu`, `taskset`, and `perf`.
+
+```
+usage: energyprof [-h] -c NUM_CPUS [-t TIME_SEC] -o OUTDIR -l LOG
+
+Collect energy and performance statistics according to CPU load
+
+options:
+  -h, --help            show this help message and exit
+  -c NUM_CPUS, --num_cpus NUM_CPUS
+                        number of CPUs of this machine
+  -t TIME_SEC, --time_sec TIME_SEC
+                        time in sec to run stress-_ng
+  -o OUTDIR, --outdir OUTDIR
+                        output directory
+  -l LOG, --log LOG     log file prefix
+```
+
 Analyzing the collected data
 ----------------------------
 Once the performance data is collected, it is time to analyze the results. In
 this phase, `vapormark` transforms various log files into the standard CSV
 format and produces the latency distribution graphs. Specifically, it provides
 the following commands. The generated files have a suffix of its program,
-`*-scinsight.*`, `*-procinsight.*`, and `*-ginsight.*`
+`*-scinsight*`, `*-procinsight*`, `*-ginsight*`, and `*-energyprof*`.
 
 #### `scinsight`: analyzing `scmon` logs
 ```
@@ -271,6 +294,22 @@ options:
   -t TIMELIMIT, --timelimit TIMELIMIT
                         time limit to draw a graph in seconds
 ```
+
+#### `energyinsight`: analyzing the results of `energyprof`
+
+```
+usage: energyinsight [-h] -o OUTDIR -l LOG [-q]
+
+Report energy usage per CPU load and number of online CPUs
+
+options:
+  -h, --help            show this help message and exit
+  -o OUTDIR, --outdir OUTDIR
+                        output directory
+  -l LOG, --log LOG     output log file prefix
+  -q, --quiet           do not print result to stdout
+```
+
 
 
 Generating a (comparison) report
