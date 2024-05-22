@@ -8,7 +8,7 @@ micro-bench/schbench/schbench.c:
 
 schbench: micro-bench/schbench/schbench.c
 	(cd $(MK_DIR)/micro-bench/schbench && make)
-	cp $$(find $(MK_DIR)/micro-bench/schbench -type f -executable -print) $(INSTALL_DIR)
+	cp $$(find $(MK_DIR)/micro-bench/schbench -type f -executable -print | grep -v '\.git/') $(INSTALL_DIR)
 
 gbench: micro-bench/gbench/gbench.c
 	(cd $(MK_DIR)/micro-bench/gbench && make)
