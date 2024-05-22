@@ -217,6 +217,12 @@ def report_energyinsight_in_csv(args):
             data.append(row)
 
     gen_data_in_csv(args, data)
+    # TODO
+    # - generate bar graphs per CPU utilization
+    #   - x-axis: per-cpu utilization
+    #   - x-tics: cpu config
+    #   - y1-axis: ops/joule
+    #   - y2-axis: ops
 
 def get_cmd_options(argv):
 
