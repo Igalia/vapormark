@@ -896,7 +896,6 @@ class pickled_jar:
         self.cs_dict = ev_callstack.cs_dict
         self.sched_events = se
 
-
 def parse_ev_time(toks):
     time = float(toks[0])
     cpu_id = int(toks[1][1:-1])
@@ -974,6 +973,9 @@ def parse_ev_line(line):
 
     toks = line.split()
     if len(toks) == 0:
+        return None
+
+    if toks[1] == 'lost':
         return None
 
     time, toks = parse_ev_time(toks)
