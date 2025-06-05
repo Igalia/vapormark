@@ -320,7 +320,11 @@ static void worker_ping_pong_pipe(struct task_data *w, struct task_data *m)
 	int wr_id = w->id;
 
 	/* let the main know */
-	write(w->ipc.pipe.tx.wfd, &wr_id, sizeof(wr_id));
+	ssize_t w_ret = write(w->ipc.pipe.tx.wfd, &wr_id, sizeof(wr_id));
+	if (w_ret != sizeof(wr_id)) {
+		perror("worker write failed");
+		exit(1);
+	}
 
 	/*
 	 * don't wait if the main threads are shutting down,
@@ -330,7 +334,11 @@ static void worker_ping_pong_pipe(struct task_data *w, struct task_data *m)
 	 */
 	if (!stopping) {
 		/* if he hasn't already woken us up, wait */
-		read(w->ipc.pipe.rx.rfd, &wr_id, sizeof(wr_id));
+		ssize_t r = read(w->ipc.pipe.rx.rfd, &wr_id, sizeof(wr_id));
+		if (r != sizeof(wr_id)) {
+			perror("worker read failed");
+			exit(1);
+		}
 	}
 }
 
@@ -393,19 +401,28 @@ int main_ping_pong_pipe(struct task_data *m, struct task_data *w, int nr_w)
 	/* unblock workers */
 	for (int i = 0; i < epoll->nfds; i++) {
 		/* read a ping message from a worker */
-		read(epoll->events[i].data.fd,
-				&wr_id, sizeof(wr_id));
+		ssize_t r = read(epoll->events[i].data.fd, &wr_id, sizeof(wr_id));
+		if (r != sizeof(wr_id)) {
+			perror("read failed");
+			exit(1);
+		}
 
 		/* send a pong message back to the worker */
-		write(w[wr_id].ipc.pipe.rx.wfd, 
-				&wr_id, sizeof(wr_id));
+		ssize_t w_ret = write(w[wr_id].ipc.pipe.rx.wfd, &wr_id, sizeof(wr_id));
+		if (w_ret != sizeof(wr_id)) {
+			perror("write failed");
+			exit(1);
+		}
 	}
 
 	if (stopping) {
 		for (int i = 0; i < nr_w; i++) {
 			wr_id = i;
-			write(w[i].ipc.pipe.rx.wfd, 
-					&wr_id, sizeof(wr_id));
+			ssize_t w_ret = write(w[i].ipc.pipe.rx.wfd, &wr_id, sizeof(wr_id));
+			if (w_ret != sizeof(wr_id)) {
+				perror("write failed (stopping)");
+				exit(1);
+			}
 		}
 		return 1;
 	}
