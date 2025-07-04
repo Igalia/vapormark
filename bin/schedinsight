@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 import graphviz
 
 wcw_thrs = [30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 95.0, 98.0, 99.0]
+nr_dot_edges_thr = 1000
+nr_dot_nodes_thr = 200
 
 def hash_rgb_from_str(s):
     h = zlib.crc32( bytes(s, 'utf-8') )
@@ -1296,6 +1298,9 @@ def plot_corr_figs(args, corrs, plot_name):
 
     # scatter plot
     for i, corr in enumerate(corrs):
+        if corr.x_data == None or corr.y_data == None:
+            break
+
         if len(corrs) > 1:
             ax = axs[i]
         else:
@@ -1418,6 +1423,7 @@ def plot_waker_waiter_graph(args, csv_data, plot_name, thr_cratio):
     #           [0,    1,    2,     3,   4,     5    ]
     node_set = set()
     # - add edges 
+    nr_edges = 0
     for node1, edge12, node2, num, ratio, cratio in csv_data.stats:
         if cratio > thr_cratio:
             break
@@ -1426,11 +1432,20 @@ def plot_waker_waiter_graph(args, csv_data, plot_name, thr_cratio):
         g.edge(tail_name=safe_node_name(node1), 
                head_name=safe_node_name(node2), 
                label=" %s (%d)" % (edge12, num))
+        nr_edges = nr_edges + 1
     # - add nodes with filledcolor
+    nr_nodes = 0
     for node in node_set:
         node_color = hex_color( hash_rgb_from_str(node) )
         g.node(name=safe_node_name(node), label=node, 
                style="filled", fillcolor=node_color, color=node_color)
+        nr_nodes = nr_nodes + 1
+
+    # - check if the graph is too large to draw in time
+    if nr_dot_edges_thr < nr_edges or nr_dot_nodes_thr < nr_nodes:
+        print("# Graph is too large to draw with %d nodes and %d edges. Skipping..." %
+              (nr_nodes, nr_edges))
+        return False
         
     # - save the graph to file
     odir, fname, suffix = get_outfile_name_x(
@@ -1442,6 +1457,7 @@ def plot_waker_waiter_graph(args, csv_data, plot_name, thr_cratio):
         g.render(view=False)
     except Exception as e:
         print(e)
+    return True
 
 def get_res_path(args, fname):
     afil = os.path.abspath(fname)
@@ -1685,10 +1701,10 @@ def gen_waiter_waker_stat(args, results, md_f):
     global wcw_thrs
     for t in wcw_thrs:
         __start_time = datetime.datetime.now()
-        plot_waker_waiter_graph(args, r.wtw_csv, "wtw_graph", t)
+        cont = plot_waker_waiter_graph(args, r.wtw_csv, "wtw_graph", t)
         __end_time = datetime.datetime.now()
         time_diff = (__end_time - __start_time).total_seconds()
-        if time_diff >= args.timelimit:
+        if not cont or time_diff >= args.timelimit:
             break
 
     # generate markdown
@@ -1764,6 +1780,9 @@ def analyze_stats_correlation(args, results):
             c.y_data = get_stat(c.y_label, results.task_csv.names, stat_cols)
             c.data_names = get_stat(c.data_label, results.task_csv.names, stat_cols)
             c.w_data = get_stat(c.w_label, results.task_csv.names, stat_cols)
+            if c.x_data == None or c.y_data == None or c.w_data == None:
+                print("Failed to calculate pcc.")
+                break
             c.calc_pcc()
             c.calc_wcc()
 
@@ -1950,9 +1969,11 @@ def analyze_waker_waiter(args, r):
 
 def parse_and_analyze_event(args):
     # parse the log
+    print("# Loading the scheduler events...")
     results = analysis_results()
     parse_schedmon_timehist(args, results)
 
+    print("# Analyzing the scheduler events...")
     # then analyze it
     # 1. 
     analyze_waker_waiter(args, results)
@@ -1967,6 +1988,8 @@ def parse_and_analyze_event(args):
     return results
 
 def gen_report(args, results):
+    print("# Generating a report...")
+
     # generate a report in markdow
     md_fname = args.output + ".md"
     with open(md_fname, "w") as md_f:
@@ -1975,6 +1998,7 @@ def gen_report(args, results):
         gen_task_stat_corr(args, results, md_f)
         gen_task_stat_over_time(args, results, md_f)
         gen_callstack_stat(args, results, md_f)
+        print("# Generating waiter-waker graphs...")
         gen_waiter_waker_stat(args, results, md_f)
 
     # convert the markdown to html
@@ -2012,5 +2036,6 @@ if __name__ == "__main__":
 
     results = parse_and_analyze_event(args)
     gen_report(args, results)
+    print("# Completed without an error")
 
 

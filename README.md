@@ -28,7 +28,7 @@ External Dependencies
         FPS (frame per second) during a running game
       - `strace`, `trace-cmd`, `cpupower`, `turbostat`, `chcpu`, `taskset`, and `perf` for collecting processor states
   - analyzing the collected data
-      - `matplotlib` and `graphviz` python library for generating graphs
+      - `matplotlib`, `graphviz`, and `numpy` python library for generating graphs
   - generating a report
       - `pandoc` for generating a report in HTML format
   - for all phases
@@ -180,7 +180,13 @@ Especially in `SteamDeck`, please refer to the following procedure:
 
 #### `schedmon`: collecting the detailed scheduling activities
 `schedmon` collects the detailed system-wide scheduling activities. It
-internally relies on `perf sched record` command.
+internally relies on `perf sched record` command. To collect the kernel
+symbol names correctly, please run the following.
+
+```
+$> echo 1 > /proc/sys/kernel/kptr_restrict
+```
+
 
 ```
 usage: schedmon [-h] -o OUTDIR -l LOG
